@@ -28,9 +28,17 @@ async function initDB() {
       username TEXT UNIQUE,
       password TEXT,
       role TEXT,
+      fullname TEXT,
       photoUrl TEXT
     );
   `);
+  
+  // Safe column add for existing databases
+  try {
+    await db.execute('ALTER TABLE users ADD COLUMN fullname TEXT;');
+  } catch (e) {
+    // Column might already exist, ignore error
+  }
   await db.execute(`
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,7 +162,7 @@ app.post('/api/auth/request', async (req, res) => {
   
   try {
     const usersJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/data/users.json'), 'utf-8'));
-    const allowedUser = usersJson.find((u: any) => u.login.toLowerCase() === emailLower);
+    const allowedUser = usersJson.find((u: any) => u.name.toLowerCase() === emailLower);
     
     if (!allowedUser) {
       return res.status(403).json({ error: 'Почта не найдена в системе' });
@@ -206,30 +214,32 @@ app.post('/api/auth/verify', async (req, res) => {
 
   try {
     const usersJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/data/users.json'), 'utf-8'));
-    const allowedUser = usersJson.find((u: any) => u.login.toLowerCase() === emailLower);
+    const allowedUser = usersJson.find((u: any) => u.name.toLowerCase() === emailLower);
     
     if (!allowedUser) {
       return res.status(403).json({ error: 'Пользователь больше не в списке' });
     }
 
     const role = allowedUser.role.toLowerCase() === 'admin' ? 'admin' : 'student';
+    const fullname = allowedUser.FIO || '';
 
     // Ensure user exists in SQLite to maintain foreign keys
-    let userQuery = await db.execute({ sql: 'SELECT id, username, role, photoUrl FROM users WHERE username = ?', args: [emailLower] });
+    let userQuery = await db.execute({ sql: 'SELECT * FROM users WHERE username = ?', args: [emailLower] });
     let user;
     
     if (userQuery.rows.length === 0) {
       const insert = await db.execute({
-        sql: 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-        args: [emailLower, '', role]
+        sql: 'INSERT INTO users (username, password, role, fullname) VALUES (?, ?, ?, ?)',
+        args: [emailLower, '', role, fullname]
       });
-      user = { id: Number(insert.lastInsertRowid), username: emailLower, role, photoUrl: null };
+      user = { id: Number(insert.lastInsertRowid), username: emailLower, role, fullname, photoUrl: null };
       io.emit('state_updated');
     } else {
       user = userQuery.rows[0];
-      if (user.role !== role) {
-         await db.execute({ sql: 'UPDATE users SET role = ? WHERE id = ?', args: [role, user.id] });
+      if (user.role !== role || user.fullname !== fullname) {
+         await db.execute({ sql: 'UPDATE users SET role = ?, fullname = ? WHERE id = ?', args: [role, fullname, user.id] });
          user.role = role;
+         user.fullname = fullname;
          io.emit('state_updated');
       }
     }

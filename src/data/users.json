@@ -1,10 +1,12 @@
 [
   {
-    "login": "00000000@live.preco.ru",
-    "role": "student"
+    "name": "00000000@live.preco.ru",
+    "role": "User",
+    "FIO": "Ученик Тестовый"
   },
   {
-    "login": "rabotaanderteil121@gmail.com",
-    "role": "admin"
+    "name": "rabotaanderteil121@gmail.com",
+    "role": "Admin",
+    "FIO": "Админ Главный"
   }
 ]
