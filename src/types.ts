@@ -48,4 +48,5 @@ export interface GameState {
   userItems: UserItem[];
   userAbilities: UserAbility[];
   logs: Log[];
+  onlineUserIds: number[];
 }

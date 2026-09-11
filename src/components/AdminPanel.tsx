@@ -16,6 +16,10 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
   const [isCreateAbilityOpen, setIsCreateAbilityOpen] = useState(false);
   const [isImportJsonOpen, setIsImportJsonOpen] = useState(false);
   const [isManageDbOpen, setIsManageDbOpen] = useState(false);
+  const [filterOnline, setFilterOnline] = useState(false);
+
+  const onlineSet = new Set(state.onlineUserIds || []);
+  const filteredStudents = students.filter(s => filterOnline ? onlineSet.has(s.id) : true);
 
   return (
     <div className="flex flex-col md:flex-row h-full w-full max-w-7xl mx-auto gap-6 p-4">
@@ -23,27 +27,49 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
       {/* Left Column - Students List */}
       <div className="w-full md:w-1/3 flex flex-col gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col h-1/2">
-          <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex justify-between items-center">
-            <h2 className="font-serif text-lg text-amber-500/90 font-medium">Ученики ({students.length})</h2>
+          <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex flex-col gap-2">
+            <h2 className="font-serif text-lg text-amber-500/90 font-medium">Ученики ({filteredStudents.length})</h2>
+            <div className="flex gap-2 text-xs">
+              <button 
+                onClick={() => setFilterOnline(false)}
+                className={`px-2 py-1 rounded-sm transition-colors ${!filterOnline ? 'bg-amber-500/20 text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Все
+              </button>
+              <button 
+                onClick={() => setFilterOnline(true)}
+                className={`px-2 py-1 rounded-sm transition-colors ${filterOnline ? 'bg-green-500/20 text-green-500' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                Онлайн
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {students.map(s => (
-              <button 
-                key={s.id} 
-                onClick={() => setSelectedStudent(s)}
-                className="w-full text-left p-3 rounded-sm flex items-center gap-3 hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700"
-              >
-                {s.photoUrl ? (
-                  <img src={s.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-zinc-700" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 text-zinc-500">
-                    <UserCircle size={24} />
+            {filteredStudents.map(s => {
+              const isOnline = onlineSet.has(s.id);
+              return (
+                <button 
+                  key={s.id} 
+                  onClick={() => setSelectedStudent(s)}
+                  className="w-full text-left p-3 rounded-sm flex items-center gap-3 hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700"
+                >
+                  <div className="relative">
+                    {s.photoUrl ? (
+                      <img src={s.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-zinc-700" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 text-zinc-500">
+                        <UserCircle size={24} />
+                      </div>
+                    )}
+                    {isOnline && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full"></div>
+                    )}
                   </div>
-                )}
-                <span className="text-zinc-200 font-serif">{s.username}</span>
-              </button>
-            ))}
-            {students.length === 0 && <div className="text-zinc-500 text-center py-8 text-sm">Нет зарегистрированных учеников</div>}
+                  <span className="text-zinc-200 font-serif flex-1">{s.username}</span>
+                </button>
+              );
+            })}
+            {filteredStudents.length === 0 && <div className="text-zinc-500 text-center py-8 text-sm">Нет учеников</div>}
           </div>
         </div>
 

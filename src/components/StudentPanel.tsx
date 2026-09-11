@@ -147,6 +147,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
         isOpen={!!targetModalOpen} 
         onClose={() => setTargetModalOpen(null)} 
         students={state.users.filter(u => u.role === 'student')}
+        onlineUserIds={state.onlineUserIds || []}
         onSelect={(targetId) => {
           if (targetModalOpen) {
             handleUseAbility(targetModalOpen.userAbilityId, targetModalOpen.abilityId, targetId);
@@ -238,7 +239,7 @@ function AbilityCard({ ua, ability, onUse }: { ua: any, ability: any, onUse: () 
   );
 }
 
-function TargetSelectionModal({ isOpen, onClose, students, onSelect }: { isOpen: boolean, onClose: () => void, students: User[], onSelect: (id: number) => void }) {
+function TargetSelectionModal({ isOpen, onClose, students, onSelect, onlineUserIds }: { isOpen: boolean, onClose: () => void, students: User[], onSelect: (id: number) => void, onlineUserIds: number[] }) {
   const [targetId, setTargetId] = useState('');
 
   useEffect(() => {
@@ -251,7 +252,11 @@ function TargetSelectionModal({ isOpen, onClose, students, onSelect }: { isOpen:
     <Modal isOpen={isOpen} onClose={onClose} title="Выберите цель">
       <div className="space-y-4">
         <Select value={targetId} onChange={e => setTargetId(e.target.value)}>
-          {students.map(s => <option key={s.id} value={s.id}>{s.username}</option>)}
+          {students.map(s => (
+            <option key={s.id} value={s.id}>
+              {s.username} {onlineUserIds.includes(s.id) ? ' (Онлайн)' : ''}
+            </option>
+          ))}
         </Select>
         <Button onClick={() => onSelect(Number(targetId))} className="w-full" disabled={!targetId}>Применить</Button>
       </div>

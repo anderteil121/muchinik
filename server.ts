@@ -93,6 +93,32 @@ async function initDB() {
 
 initDB().catch(console.error);
 
+// Track online users
+const onlineUsers = new Map<number, Set<string>>();
+
+io.on('connection', (socket) => {
+  let currentUserId: number | null = null;
+  
+  socket.on('identify', (userId: number) => {
+    currentUserId = userId;
+    if (!onlineUsers.has(userId)) {
+      onlineUsers.set(userId, new Set());
+    }
+    onlineUsers.get(userId)!.add(socket.id);
+    io.emit('state_updated');
+  });
+
+  socket.on('disconnect', () => {
+    if (currentUserId && onlineUsers.has(currentUserId)) {
+      onlineUsers.get(currentUserId)!.delete(socket.id);
+      if (onlineUsers.get(currentUserId)!.size === 0) {
+        onlineUsers.delete(currentUserId);
+      }
+      io.emit('state_updated');
+    }
+  });
+});
+
 async function logAction(message: string) {
   await db.execute({
     sql: 'INSERT INTO logs (message, createdAt) VALUES (?, ?)',
@@ -138,8 +164,9 @@ app.get('/api/state', async (req, res) => {
     const userItems = (await db.execute('SELECT * FROM user_items')).rows;
     const userAbilities = (await db.execute('SELECT * FROM user_abilities')).rows;
     const logs = (await db.execute('SELECT * FROM logs ORDER BY createdAt DESC LIMIT 200')).rows;
+    const onlineUserIds = Array.from(onlineUsers.keys());
 
-    res.json({ users, items, abilities, userItems, userAbilities, logs });
+    res.json({ users, items, abilities, userItems, userAbilities, logs, onlineUserIds });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch state' });
