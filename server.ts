@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -128,31 +129,116 @@ async function logAction(message: string) {
 }
 
 // REST APIs
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  const result = await db.execute({
-    sql: 'SELECT id, username, role, photoUrl FROM users WHERE username = ? AND password = ?',
-    args: [username, password]
+import fs from 'fs';
+import nodemailer from 'nodemailer';
+
+const otpStore = new Map<string, string>();
+
+let mailTransporter: nodemailer.Transporter | null = null;
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  mailTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_PORT === '465',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
   });
-  if (result.rows.length > 0) {
-    res.json(result.rows[0]);
-  } else {
-    res.status(401).json({ error: 'Invalid credentials' });
+  console.log('Nodemailer SMTP Transporter configured.');
+}
+
+app.post('/api/auth/request', async (req, res) => {
+  const { email } = req.body;
+  const emailLower = email.trim().toLowerCase();
+  
+  try {
+    const usersJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/data/users.json'), 'utf-8'));
+    const allowedUser = usersJson.find((u: any) => u.login.toLowerCase() === emailLower);
+    
+    if (!allowedUser) {
+      return res.status(403).json({ error: 'Почта не найдена в системе' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    otpStore.set(emailLower, otp);
+
+    if (mailTransporter) {
+      try {
+        await mailTransporter.sendMail({
+          from: process.env.SMTP_FROM || `"Академия Мучеников" <${process.env.SMTP_USER}>`,
+          to: emailLower,
+          subject: 'Врата Академии: Ваш код доступа',
+          text: `Ваш код доступа для входа в систему: ${otp}\n\nНикому не сообщайте этот код.`,
+          html: `
+            <div style="font-family: serif; color: #18181b; padding: 20px;">
+              <h2 style="color: #b45309;">Академия Мучеников</h2>
+              <p>Ваш код доступа для входа в систему:</p>
+              <h1 style="font-size: 32px; letter-spacing: 4px; background: #f4f4f5; padding: 10px 20px; display: inline-block; border-radius: 4px;">${otp}</h1>
+              <p style="color: #71717a; font-size: 12px; margin-top: 20px;">Если вы не запрашивали этот код, просто проигнорируйте это письмо.</p>
+            </div>
+          `
+        });
+        console.log(`Real email sent to: ${emailLower}`);
+      } catch (mailError: any) {
+        console.error('SMTP Error:', mailError);
+        return res.status(500).json({ error: 'Ошибка SMTP: неверный логин или пароль приложения почты.' });
+      }
+    } else {
+      console.log(`\n=========================================\nSIMULATED EMAIL TO: ${emailLower}\nYOUR OTP CODE IS: ${otp}\n(Add SMTP credentials in Environment Settings for real emails)\n=========================================\n`);
+    }
+
+    res.json({ success: true, message: 'Код отправлен' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error: Failed to process request' });
   }
 });
 
-app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/auth/verify', async (req, res) => {
+  const { email, code } = req.body;
+  const emailLower = email.trim().toLowerCase();
+  const cleanCode = code.trim();
+  
+  if (otpStore.get(emailLower) !== cleanCode) {
+    return res.status(401).json({ error: 'Неверный код' });
+  }
+
   try {
-    const result = await db.execute({
-      sql: 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-      args: [username, password, 'student']
-    });
-    const newUser = { id: Number(result.lastInsertRowid), username, role: 'student', photoUrl: null };
-    io.emit('state_updated');
-    res.json(newUser);
-  } catch (e) {
-    res.status(400).json({ error: 'Username already taken' });
+    const usersJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src/data/users.json'), 'utf-8'));
+    const allowedUser = usersJson.find((u: any) => u.login.toLowerCase() === emailLower);
+    
+    if (!allowedUser) {
+      return res.status(403).json({ error: 'Пользователь больше не в списке' });
+    }
+
+    const role = allowedUser.role.toLowerCase() === 'admin' ? 'admin' : 'student';
+
+    // Ensure user exists in SQLite to maintain foreign keys
+    let userQuery = await db.execute({ sql: 'SELECT id, username, role, photoUrl FROM users WHERE username = ?', args: [emailLower] });
+    let user;
+    
+    if (userQuery.rows.length === 0) {
+      const insert = await db.execute({
+        sql: 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+        args: [emailLower, '', role]
+      });
+      user = { id: Number(insert.lastInsertRowid), username: emailLower, role, photoUrl: null };
+      io.emit('state_updated');
+    } else {
+      user = userQuery.rows[0];
+      if (user.role !== role) {
+         await db.execute({ sql: 'UPDATE users SET role = ? WHERE id = ?', args: [role, user.id] });
+         user.role = role;
+         io.emit('state_updated');
+      }
+    }
+
+    otpStore.delete(emailLower);
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

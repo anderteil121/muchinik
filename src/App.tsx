@@ -27,34 +27,64 @@ export default function App() {
   }, [user]);
   
   // Auth state
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [authStep, setAuthStep] = useState<1 | 2>(1);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const endpoint = isLogin ? '/api/login' : '/api/register';
-    
+    setLoading(true);
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/auth/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ email: email.trim() })
       });
       
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Authentication failed');
+        setError(data.error || 'Ошибка');
+        setLoading(false);
+        return;
+      }
+      
+      setSuccessMsg(data.message);
+      setAuthStep(2);
+    } catch (err) {
+      setError('Network error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: otp.trim() })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Ошибка');
+        setLoading(false);
         return;
       }
       
       setUser(data);
-      // Wait a moment for socket to sync or just fetch immediately
       fetchState();
     } catch (err) {
       setError('Network error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -74,33 +104,44 @@ export default function App() {
               <p className="text-zinc-500 font-serif italic text-sm">Врата открываются лишь достойным</p>
             </div>
 
-            <form onSubmit={handleAuth} className="bg-zinc-900 border border-red-900/30 p-6 rounded-sm shadow-2xl shadow-red-900/10 space-y-4 relative">
+            <form onSubmit={authStep === 1 ? handleRequestOtp : handleVerifyOtp} className="bg-zinc-900 border border-red-900/30 p-6 rounded-sm shadow-2xl shadow-red-900/10 space-y-4 relative">
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs text-zinc-500 uppercase tracking-widest mb-1 block">Имя</label>
-                  <Input value={username} onChange={e => setUsername(e.target.value)} required />
-                </div>
-                <div>
-                  <label className="text-xs text-zinc-500 uppercase tracking-widest mb-1 block">Пароль</label>
-                  <Input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                </div>
+                {authStep === 1 ? (
+                  <div>
+                    <label className="text-xs text-zinc-500 uppercase tracking-widest mb-1 block">Email (Логин)</label>
+                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={loading} placeholder="ваша@почта.ru" />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-xs text-zinc-500 uppercase tracking-widest mb-1 block">Код из письма</label>
+                    <Input type="text" value={otp} onChange={e => setOtp(e.target.value)} required disabled={loading} placeholder="123456" />
+                  </div>
+                )}
               </div>
 
               {error && <div className="text-red-500 text-xs text-center p-2 bg-red-950/50 rounded-sm border border-red-900">{error}</div>}
+              {successMsg && authStep === 2 && <div className="text-amber-500/90 text-xs text-center p-2 bg-amber-950/30 rounded-sm border border-amber-900/50">{successMsg}</div>}
 
-              <Button type="submit" className="w-full h-11 text-lg tracking-wider">
-                {isLogin ? 'Войти' : 'Создать печать'}
+              <Button type="submit" className="w-full h-11 text-lg tracking-wider" disabled={loading}>
+                {loading ? '...' : authStep === 1 ? 'Получить код' : 'Войти'}
               </Button>
               
-              <div className="text-center pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsLogin(!isLogin)} 
-                  className="text-xs text-zinc-500 hover:text-amber-500/80 transition-colors"
-                >
-                  {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
-                </button>
-              </div>
+              {authStep === 2 && (
+                <div className="text-center pt-2">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setAuthStep(1);
+                      setOtp('');
+                      setError('');
+                      setSuccessMsg('');
+                    }} 
+                    className="text-xs text-zinc-500 hover:text-amber-500/80 transition-colors"
+                  >
+                    Вернуться к вводу почты
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
