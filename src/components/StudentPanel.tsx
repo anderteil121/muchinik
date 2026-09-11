@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
-import { Button, Modal, Select } from './ui';
+import { Button, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
 import { UserCircle, Clock } from 'lucide-react';
 
@@ -79,13 +79,21 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
             </div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
               {studentItems.map(ui => ui.item && (
-                <div key={ui.id} className="p-3 bg-zinc-950/50 border border-zinc-800 rounded-sm flex justify-between items-center group hover:border-zinc-600 transition-colors">
-                  <div>
-                    <div className="font-medium text-red-100">{ui.item.name}</div>
-                    <div className="text-xs text-zinc-400 mt-1">{ui.item.description}</div>
+                <Tooltip 
+                  key={ui.id} 
+                  align="right"
+                  content={ui.item.description}
+                >
+                  <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
+                    {ui.item.iconUrl ? (
+                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
+                    ) : (
+                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs">?</div>
+                    )}
+                    <div className="flex-1 font-medium text-red-100">{ui.item.name}</div>
+                    <Button onClick={() => handleUseItem(ui.id)} variant="secondary" className="opacity-0 group-hover:opacity-100 transition-opacity">Использовать</Button>
                   </div>
-                  <Button onClick={() => handleUseItem(ui.id)} variant="secondary" className="opacity-0 group-hover:opacity-100 transition-opacity">Использовать</Button>
-                </div>
+                </Tooltip>
               ))}
               {studentItems.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Рюкзак пуст</div>}
             </div>
@@ -118,7 +126,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
           <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
           <Clock size={18} className="text-zinc-500" />
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 z-10">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10">
           {state.logs.map(log => (
             <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm shadow-sm">
               <div className="text-zinc-500 text-xs mb-1 font-mono">
@@ -173,35 +181,60 @@ function AbilityCard({ ua, ability, onUse }: { ua: any, ability: any, onUse: () 
   const isReady = cdLeft === 0;
 
   return (
-    <div className="p-3 bg-zinc-950/50 border border-zinc-800 rounded-sm group relative overflow-hidden">
-      <div className="flex justify-between items-start mb-2 relative z-10">
-        <div className="font-medium text-amber-200/90">{ability.name}</div>
-        <span className="text-[10px] uppercase tracking-widest text-zinc-500 bg-zinc-900 px-1 rounded-sm border border-zinc-800">
-          {ability.type === 'active' ? 'Актив' : 'Пассив'}
-        </span>
-      </div>
-      <div className="text-xs text-zinc-400 mb-3 relative z-10">{ability.description}</div>
-      
-      {ability.type === 'active' && (
-        <div className="relative z-10">
+    <Tooltip
+      align="left"
+      content={
+        <>
+          {ability.description}
+          {ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ability.cooldown} сек.</div>}
+        </>
+      }
+    >
+      <div className={`relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 transition-colors ${!isReady ? 'grayscale opacity-75' : 'hover:border-zinc-600 cursor-pointer'}`}>
+        
+        <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-900 flex items-center justify-center">
+          {ability.iconUrl ? (
+            <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-zinc-700 font-mono text-xs">?</span>
+          )}
+          
+          {/* Cooldown Overlay (Vertical Sweep) */}
+          {!isReady && ability.type === 'active' && (
+            <div 
+              className="absolute bottom-0 left-0 w-full bg-red-950/80 transition-all duration-1000 ease-linear flex flex-col justify-start" 
+              style={{ height: `${(cdLeft / ability.cooldown) * 100}%` }}
+            >
+            </div>
+          )}
+          
+          {/* Cooldown Number */}
+          {!isReady && ability.type === 'active' && (
+            <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs z-20 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+              {cdLeft}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1">
+          <div className="font-medium text-amber-200/90">{ability.name}</div>
+          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+            {ability.type === 'active' ? 'Активная' : 'Пассивная'}
+          </div>
+        </div>
+        
+        {ability.type === 'active' && (
           <Button 
             onClick={onUse} 
             disabled={!isReady}
-            className={`w-full text-xs py-1.5 ${!isReady ? 'bg-zinc-800 text-zinc-500 border-zinc-700' : ''}`}
+            variant="secondary"
+            className={`opacity-0 group-hover:opacity-100 transition-opacity ${!isReady ? 'hidden' : ''}`}
           >
-            {isReady ? 'Использовать' : `Перезарядка: ${cdLeft}с`}
+            Использовать
           </Button>
-        </div>
-      )}
-
-      {/* Cooldown overlay progress */}
-      {!isReady && ability.type === 'active' && (
-        <div 
-          className="absolute bottom-0 left-0 h-1 bg-red-900/50 transition-all duration-1000 linear" 
-          style={{ width: `${(cdLeft / ability.cooldown) * 100}%` }}
-        />
-      )}
-    </div>
+        )}
+      </div>
+    </Tooltip>
   );
 }
 

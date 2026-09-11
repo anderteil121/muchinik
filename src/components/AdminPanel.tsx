@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { User, GameState } from '../types';
-import { Button, Input, Modal, Select } from './ui';
+import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database } from 'lucide-react';
 
 interface AdminPanelProps {
   state: GameState;
@@ -15,6 +15,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
   const [isCreateItemOpen, setIsCreateItemOpen] = useState(false);
   const [isCreateAbilityOpen, setIsCreateAbilityOpen] = useState(false);
   const [isImportJsonOpen, setIsImportJsonOpen] = useState(false);
+  const [isManageDbOpen, setIsManageDbOpen] = useState(false);
 
   return (
     <div className="flex flex-col md:flex-row h-full w-full max-w-7xl mx-auto gap-6 p-4">
@@ -58,6 +59,9 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
           <Button onClick={() => setIsImportJsonOpen(true)} className="w-full justify-start gap-2" variant="secondary">
             <Upload size={18} /> Импорт из JSON
           </Button>
+          <Button onClick={() => setIsManageDbOpen(true)} className="w-full justify-start gap-2" variant="secondary">
+            <Database size={18} /> База знаний
+          </Button>
         </div>
       </div>
 
@@ -72,7 +76,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
               <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
               <Clock size={18} className="text-zinc-500" />
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 z-10">
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10">
               {state.logs.map(log => (
                 <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm">
                   <div className="text-zinc-500 text-xs mb-1 font-mono">
@@ -94,6 +98,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
       <CreateItemModal isOpen={isCreateItemOpen} onClose={() => setIsCreateItemOpen(false)} />
       <CreateAbilityModal isOpen={isCreateAbilityOpen} onClose={() => setIsCreateAbilityOpen(false)} />
       <ImportJsonModal isOpen={isImportJsonOpen} onClose={() => setIsImportJsonOpen(false)} />
+      <ManageDbModal isOpen={isManageDbOpen} onClose={() => setIsManageDbOpen(false)} state={state} />
     </div>
   );
 }
@@ -159,10 +164,16 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
             </div>
             <div className="space-y-2">
               {studentItems.map(ui => ui.item && (
-                <div key={ui.id} className="p-3 bg-zinc-950/50 border border-zinc-800 rounded-sm">
-                  <div className="font-medium text-red-100">{ui.item.name}</div>
-                  <div className="text-xs text-zinc-400 mt-1">{ui.item.description}</div>
-                </div>
+                <Tooltip key={ui.id} align="right" content={ui.item.description}>
+                  <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
+                    {ui.item.iconUrl ? (
+                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
+                    ) : (
+                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs">?</div>
+                    )}
+                    <div className="flex-1 font-medium text-red-100">{ui.item.name}</div>
+                  </div>
+                </Tooltip>
               ))}
               {studentItems.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
             </div>
@@ -175,30 +186,48 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
             </div>
             <div className="space-y-2">
               {studentAbilities.map(ua => ua.ability && (
-                <div key={ua.id} className="p-3 bg-zinc-950/50 border border-zinc-800 rounded-sm group relative">
-                  <div className="flex justify-between items-start">
-                    <div className="font-medium text-amber-200/90">{ua.ability.name}</div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-widest text-zinc-500 bg-zinc-900 px-1 rounded-sm border border-zinc-800">
-                        {ua.ability.type === 'active' ? 'Актив' : 'Пассив'}
-                      </span>
-                      <button 
-                        onClick={async () => {
-                          await fetch('/api/admin/remove-ability', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userAbilityId: ua.id })
-                          });
-                        }}
-                        className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                        title="Забыть способность"
-                      >
-                        <X size={14} />
-                      </button>
+                <Tooltip
+                  key={ua.id}
+                  align="left"
+                  content={
+                    <>
+                      {ua.ability.description}
+                      {ua.ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ua.ability.cooldown} сек.</div>}
+                    </>
+                  }
+                >
+                  <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
+                    
+                    <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-900 flex items-center justify-center">
+                      {ua.ability.iconUrl ? (
+                        <img src={ua.ability.iconUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-zinc-700 font-mono text-xs">?</span>
+                      )}
                     </div>
+
+                    <div className="flex-1">
+                      <div className="font-medium text-amber-200/90">{ua.ability.name}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                        {ua.ability.type === 'active' ? 'Активная' : 'Пассивная'}
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={async () => {
+                        await fetch('/api/admin/remove-ability', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userAbilityId: ua.id })
+                        });
+                      }}
+                      className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
+                      title="Забыть способность"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                  <div className="text-xs text-zinc-400 mt-1 pr-6">{ua.ability.description}</div>
-                </div>
+                </Tooltip>
               ))}
               {studentAbilities.length === 0 && <div className="text-zinc-600 text-sm">Нет способностей</div>}
             </div>
@@ -212,52 +241,125 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
   );
 }
 
-function CreateItemModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+function CreateItemModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose: () => void, initialData?: any }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
+  const [iconUrl, setIconUrl] = useState('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setName(initialData?.name || '');
+      setDesc(initialData?.description || '');
+      setIconUrl(initialData?.iconUrl || '');
+    }
+  }, [isOpen, initialData]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setIconUrl(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const submit = async () => {
-    await fetch('/api/admin/create-item', {
+    const endpoint = initialData ? '/api/admin/edit-item' : '/api/admin/create-item';
+    await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description: desc })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, iconUrl })
     });
-    setName(''); setDesc('');
+    if (!initialData) { setName(''); setDesc(''); setIconUrl(''); }
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Создать предмет">
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Изменить предмет" : "Создать предмет"}>
       <div className="space-y-4">
         <Input placeholder="Название предмета" value={name} onChange={e => setName(e.target.value)} />
+        <div className="flex gap-4 items-center">
+          {iconUrl ? (
+            <img src={iconUrl} alt="" className="w-12 h-12 rounded-sm object-cover border border-zinc-700" />
+          ) : (
+            <div className="w-12 h-12 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 text-xs flex-shrink-0">?</div>
+          )}
+          <div className="flex-1 space-y-2">
+            <Input placeholder="URL изображения" value={iconUrl} onChange={e => setIconUrl(e.target.value)} />
+            <label className="text-xs text-amber-500 cursor-pointer hover:underline block">
+              Или загрузить файл с устройства...
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+            </label>
+          </div>
+        </div>
         <Input placeholder="Описание" value={desc} onChange={e => setDesc(e.target.value)} />
-        <Button onClick={submit} className="w-full">Создать</Button>
+        <Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
       </div>
     </Modal>
   );
 }
 
-function CreateAbilityModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
+function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean, onClose: () => void, initialData?: any }) {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
+  const [iconUrl, setIconUrl] = useState('');
   const [type, setType] = useState('active');
   const [target, setTarget] = useState('self');
   const [cooldown, setCooldown] = useState('10');
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setName(initialData?.name || '');
+      setDesc(initialData?.description || '');
+      setIconUrl(initialData?.iconUrl || '');
+      setType(initialData?.type || 'active');
+      setTarget(initialData?.target || 'self');
+      setCooldown(initialData?.cooldown ? String(initialData.cooldown) : '10');
+    }
+  }, [isOpen, initialData]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setIconUrl(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const submit = async () => {
-    await fetch('/api/admin/create-ability', {
+    const endpoint = initialData ? '/api/admin/edit-ability' : '/api/admin/create-ability';
+    await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description: desc, type, target, cooldown: Number(cooldown) })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl })
     });
-    setName(''); setDesc(''); setCooldown('10');
+    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); }
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Создать способность">
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Изменить способность" : "Создать способность"}>
       <div className="space-y-4">
         <Input placeholder="Название способности" value={name} onChange={e => setName(e.target.value)} />
+        
+        <div className="flex gap-4 items-center">
+          {iconUrl ? (
+            <img src={iconUrl} alt="" className="w-12 h-12 rounded-sm object-cover border border-zinc-700" />
+          ) : (
+            <div className="w-12 h-12 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 text-xs flex-shrink-0">?</div>
+          )}
+          <div className="flex-1 space-y-2">
+            <Input placeholder="URL изображения" value={iconUrl} onChange={e => setIconUrl(e.target.value)} />
+            <label className="text-xs text-amber-500 cursor-pointer hover:underline block">
+              Или загрузить файл с устройства...
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+            </label>
+          </div>
+        </div>
+
         <Input placeholder="Описание" value={desc} onChange={e => setDesc(e.target.value)} />
         
         <Select value={type} onChange={e => setType(e.target.value)}>
@@ -277,15 +379,17 @@ function CreateAbilityModal({ isOpen, onClose }: { isOpen: boolean, onClose: () 
           </div>
         )}
 
-        <Button onClick={submit} className="w-full">Создать</Button>
+        <Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
       </div>
     </Modal>
   );
 }
 
 function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean, onClose: () => void, studentId: number, items: any[] }) {
-  const [itemId, setItemId] = useState(items[0]?.id || '');
+  const [itemId, setItemId] = useState<number | ''>('');
   
+  React.useEffect(() => { if (!isOpen) setItemId(''); }, [isOpen]);
+
   const submit = async () => {
     if (!itemId) return;
     await fetch('/api/admin/grant-item', {
@@ -299,10 +403,25 @@ function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Выдать предмет">
       <div className="space-y-4">
-        <Select value={itemId} onChange={e => setItemId(e.target.value)}>
-          <option value="">Выберите предмет...</option>
-          {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-        </Select>
+        <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+          {items.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setItemId(item.id)}
+              className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
+                itemId === item.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              {item.iconUrl ? (
+                <img src={item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-700" />
+              ) : (
+                <div className="w-10 h-10 bg-zinc-950 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
+              )}
+              <div className="flex-1 font-medium text-red-100">{item.name}</div>
+            </button>
+          ))}
+          {items.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Нет доступных предметов</div>}
+        </div>
         <Button onClick={submit} className="w-full" disabled={!itemId}>Выдать</Button>
       </div>
     </Modal>
@@ -310,8 +429,10 @@ function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean,
 }
 
 function TeachAbilityModal({ isOpen, onClose, studentId, abilities }: { isOpen: boolean, onClose: () => void, studentId: number, abilities: any[] }) {
-  const [abilityId, setAbilityId] = useState(abilities[0]?.id || '');
+  const [abilityId, setAbilityId] = useState<number | ''>('');
   
+  React.useEffect(() => { if (!isOpen) setAbilityId(''); }, [isOpen]);
+
   const submit = async () => {
     if (!abilityId) return;
     await fetch('/api/admin/teach-ability', {
@@ -325,10 +446,32 @@ function TeachAbilityModal({ isOpen, onClose, studentId, abilities }: { isOpen: 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Обучить способности">
       <div className="space-y-4">
-        <Select value={abilityId} onChange={e => setAbilityId(e.target.value)}>
-          <option value="">Выберите способность...</option>
-          {abilities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </Select>
+        <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+          {abilities.map(ability => (
+            <button
+              key={ability.id}
+              onClick={() => setAbilityId(ability.id)}
+              className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
+                abilityId === ability.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              <div className="relative w-10 h-10 flex-shrink-0 border border-zinc-700 rounded-sm overflow-hidden bg-zinc-950 flex items-center justify-center">
+                {ability.iconUrl ? (
+                  <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-zinc-700 font-mono text-xs">?</span>
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="font-medium text-amber-200/90">{ability.name}</div>
+                <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                  {ability.type === 'active' ? 'Активная' : 'Пассивная'}
+                </div>
+              </div>
+            </button>
+          ))}
+          {abilities.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Нет доступных способностей</div>}
+        </div>
         <Button onClick={submit} className="w-full" disabled={!abilityId}>Обучить</Button>
       </div>
     </Modal>
@@ -400,6 +543,75 @@ function ImportJsonModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
           <input type="file" accept=".json" className="hidden" onChange={handleFileChange} disabled={loading} />
         </label>
       </div>
+    </Modal>
+  );
+}
+
+function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: () => void, state: GameState }) {
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingAbility, setEditingAbility] = useState<any>(null);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Управление базой знаний">
+      <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+        <div>
+          <h3 className="font-serif text-lg text-zinc-200 mb-3 sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10">Предметы ({state.items.length})</h3>
+          <div className="space-y-2">
+            {state.items.map(item => (
+              <div key={item.id} className="relative group p-2 bg-zinc-900/50 border border-zinc-800 rounded-sm flex items-center gap-3">
+                {item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
+                ) : (
+                  <div className="w-10 h-10 bg-zinc-950 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
+                )}
+                <div className="flex-1 font-medium text-red-100">{item.name}</div>
+                <button 
+                  onClick={() => setEditingItem(item)}
+                  className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                  title="Изменить"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            ))}
+            {state.items.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-serif text-lg text-zinc-200 mb-3 sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10">Способности ({state.abilities.length})</h3>
+          <div className="space-y-2">
+            {state.abilities.map(ability => (
+              <div key={ability.id} className="relative group p-2 bg-zinc-900/50 border border-zinc-800 rounded-sm flex items-center gap-3">
+                <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-950 flex items-center justify-center">
+                  {ability.iconUrl ? (
+                    <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-zinc-700 font-mono text-xs">?</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-amber-200/90">{ability.name}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    {ability.type === 'active' ? 'Активная' : 'Пассивная'}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setEditingAbility(ability)}
+                  className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                  title="Изменить"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            ))}
+            {state.abilities.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
+          </div>
+        </div>
+      </div>
+
+      {editingItem && <CreateItemModal isOpen={true} onClose={() => setEditingItem(null)} initialData={editingItem} />}
+      {editingAbility && <CreateAbilityModal isOpen={true} onClose={() => setEditingAbility(null)} initialData={editingAbility} />}
     </Modal>
   );
 }

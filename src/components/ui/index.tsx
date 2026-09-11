@@ -48,3 +48,38 @@ export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, o
     </div>
   );
 }
+
+import { createPortal } from 'react-dom';
+
+export function Tooltip({ content, children, align = 'right' }: { content: React.ReactNode, children: React.ReactElement, align?: 'left' | 'right' }) {
+  const [rect, setRect] = React.useState<DOMRect | null>(null);
+
+  return (
+    <>
+      {React.cloneElement(children, {
+        onMouseEnter: (e: React.MouseEvent) => {
+          setRect(e.currentTarget.getBoundingClientRect());
+          if (children.props.onMouseEnter) children.props.onMouseEnter(e);
+        },
+        onMouseLeave: (e: React.MouseEvent) => {
+          setRect(null);
+          if (children.props.onMouseLeave) children.props.onMouseLeave(e);
+        },
+        // We ensure group hover classes still work by wrapping or maintaining the class
+      })}
+      {rect && typeof window !== 'undefined' && createPortal(
+        <div 
+          className="fixed z-[99999] w-48 bg-zinc-900 border border-zinc-700 p-2 text-xs text-zinc-300 rounded-sm shadow-2xl pointer-events-none animate-in fade-in duration-100"
+          style={{
+            top: rect.top + rect.height / 2,
+            left: align === 'left' ? rect.left - 8 : rect.right + 8,
+            transform: align === 'left' ? 'translate(-100%, -50%)' : 'translate(0, -50%)'
+          }}
+        >
+          {content}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}

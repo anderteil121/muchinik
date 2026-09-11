@@ -1,6 +1,6 @@
 {
   "name": "Мученики",
-  "description": "Dark Fantasy role-playing application with real-time multiplayer",
+  "description": "Role-playing application with real-time multiplayer",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -34,7 +34,8 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
-      description TEXT
+      description TEXT,
+      iconUrl TEXT
     );
   `);
   await db.execute(`
@@ -44,9 +45,15 @@ async function initDB() {
       description TEXT,
       type TEXT,
       target TEXT,
-      cooldown INTEGER
+      cooldown INTEGER,
+      iconUrl TEXT
     );
   `);
+
+  // Migrate existing tables
+  try { await db.execute('ALTER TABLE items ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE abilities ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS user_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,8 +168,8 @@ app.post('/api/admin/bulk-import', async (req, res) => {
           itemId = itemQuery.rows[0].id;
         } else {
           const insertItem = await db.execute({
-            sql: 'INSERT INTO items (name, description) VALUES (?, ?)',
-            args: [entry.name, entry.description || '']
+            sql: 'INSERT INTO items (name, description, iconUrl) VALUES (?, ?, ?)',
+            args: [entry.name, entry.description || '', entry.iconUrl || null]
           });
           itemId = Number(insertItem.lastInsertRowid);
         }
@@ -180,8 +187,8 @@ app.post('/api/admin/bulk-import', async (req, res) => {
           const aTarget = entry.target === 'ally' || entry['on an ally'] === true ? 'ally' : 'self';
           const aCooldown = entry.cooldown || 0;
           const insertAb = await db.execute({
-            sql: 'INSERT INTO abilities (name, description, type, target, cooldown) VALUES (?, ?, ?, ?, ?)',
-            args: [entry.name, entry.description || '', aType, aTarget, aCooldown]
+            sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl) VALUES (?, ?, ?, ?, ?, ?)',
+            args: [entry.name, entry.description || '', aType, aTarget, aCooldown, entry.iconUrl || null]
           });
           abId = Number(insertAb.lastInsertRowid);
         }
@@ -207,21 +214,41 @@ app.post('/api/admin/bulk-import', async (req, res) => {
   }
 });
 
-app.post('/api/admin/create-item', async (req, res) => {
-  const { name, description } = req.body;
+app.post('/api/admin/edit-item', async (req, res) => {
+  const { id, name, description, iconUrl } = req.body;
   await db.execute({
-    sql: 'INSERT INTO items (name, description) VALUES (?, ?)',
-    args: [name, description]
+    sql: 'UPDATE items SET name = ?, description = ?, iconUrl = ? WHERE id = ?',
+    args: [name, description, iconUrl || null, id]
+  });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
+app.post('/api/admin/edit-ability', async (req, res) => {
+  const { id, name, description, type, target, cooldown, iconUrl } = req.body;
+  await db.execute({
+    sql: 'UPDATE abilities SET name = ?, description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ? WHERE id = ?',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null, id]
+  });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
+app.post('/api/admin/create-item', async (req, res) => {
+  const { name, description, iconUrl } = req.body;
+  await db.execute({
+    sql: 'INSERT INTO items (name, description, iconUrl) VALUES (?, ?, ?)',
+    args: [name, description, iconUrl || null]
   });
   io.emit('state_updated');
   res.json({ success: true });
 });
 
 app.post('/api/admin/create-ability', async (req, res) => {
-  const { name, description, type, target, cooldown } = req.body;
+  const { name, description, type, target, cooldown, iconUrl } = req.body;
   await db.execute({
-    sql: 'INSERT INTO abilities (name, description, type, target, cooldown) VALUES (?, ?, ?, ?, ?)',
-    args: [name, description, type, target, cooldown || 0]
+    sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null]
   });
   io.emit('state_updated');
   res.json({ success: true });

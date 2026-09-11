@@ -9,6 +9,7 @@ export interface Item {
   id: number;
   name: string;
   description: string;
+  iconUrl?: string;
 }
 
 export interface Ability {
@@ -18,6 +19,7 @@ export interface Ability {
   type: 'passive' | 'active';
   target: 'self' | 'ally';
   cooldown: number;
+  iconUrl?: string;
 }
 
 export interface UserItem {
