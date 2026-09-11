@@ -345,7 +345,11 @@ async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        host: true, // Разрешает доступ из локальной сети по IP (0.0.0.0)
+        allowedHosts: 'all' // Разрешает любые заголовки хоста
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);
