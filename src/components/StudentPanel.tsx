@@ -121,12 +121,12 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
       </div>
 
       {/* Right Column - Logs */}
-      <div className="w-full md:w-1/3 bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden relative">
+      <div className="w-full md:w-1/3 bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden relative max-h-[400px] md:max-h-none">
         <div className="bg-zinc-950/80 p-4 border-b border-zinc-800 flex items-center justify-between z-10">
           <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
           <Clock size={18} className="text-zinc-500" />
         </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10 max-h-[300px] md:max-h-[600px]">
           {state.logs.map(log => (
             <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm shadow-sm">
               <div className="text-zinc-500 text-xs mb-1 font-mono">

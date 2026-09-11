@@ -96,13 +96,13 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
         {selectedStudent ? (
           <StudentProfile adminView student={selectedStudent} state={state} onClose={() => setSelectedStudent(null)} />
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex-1 flex flex-col overflow-hidden relative">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex-1 flex flex-col overflow-hidden relative max-h-[400px] md:max-h-none">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-zinc-900 to-zinc-900 pointer-events-none" />
             <div className="bg-zinc-950/80 p-4 border-b border-zinc-800 flex items-center justify-between z-10">
               <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
               <Clock size={18} className="text-zinc-500" />
             </div>
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10">
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10 max-h-[300px] md:max-h-[600px]">
               {state.logs.map(log => (
                 <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm">
                   <div className="text-zinc-500 text-xs mb-1 font-mono">
@@ -544,19 +544,20 @@ function ImportJsonModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
           <pre className="text-[10px] text-amber-500/70 overflow-x-auto">
 {`[
   {
-    "username": "Renat",
+    "username": "Renat", // необязательно: если убрать, добавится только в базу знаний
     "type": "ability",
     "name": "Fireball",
     "description": "Огненный шар",
     "abilityType": "active",
     "target": "ally",
-    "cooldown": 10
+    "cooldown": 10,
+    "iconUrl": "https://..." // необязательно: если убрать, сгенерируется картинка с первой буквой
   },
   {
-    "username": "Renat",
-    "type": "item",
+    "type": "item", // username не указан, значит добавится только в базу
     "name": "Зелье здоровья",
-    "description": "Восстанавливает ХП"
+    "description": "Восстанавливает ХП",
+    "iconUrl": "https://..."
   }
 ]`}
           </pre>

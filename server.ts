@@ -180,14 +180,20 @@ app.post('/api/admin/bulk-import', async (req, res) => {
 
   try {
     for (const entry of data) {
-      const username = entry.username || entry.targetUser || entry.user || entry.name;
-      if (!username) continue;
-      
-      const userQuery = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: [username] });
-      if (userQuery.rows.length === 0) continue;
-      const userId = userQuery.rows[0].id;
-
       const type = entry.type?.toLowerCase();
+      if (type !== 'item' && type !== 'ability') continue;
+
+      const username = entry.username || entry.targetUser || entry.user;
+      let userId = null;
+      if (username) {
+        const userQuery = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: [username] });
+        if (userQuery.rows.length > 0) {
+          userId = userQuery.rows[0].id;
+        }
+      }
+
+      const iconUrl = entry.iconUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(entry.name || 'X')}&background=18181b&color=a1a1aa`;
+
       if (type === 'item') {
         let itemQuery = await db.execute({ sql: 'SELECT id FROM items WHERE name = ?', args: [entry.name] });
         let itemId;
@@ -196,14 +202,17 @@ app.post('/api/admin/bulk-import', async (req, res) => {
         } else {
           const insertItem = await db.execute({
             sql: 'INSERT INTO items (name, description, iconUrl) VALUES (?, ?, ?)',
-            args: [entry.name, entry.description || '', entry.iconUrl || null]
+            args: [entry.name, entry.description || '', iconUrl]
           });
           itemId = Number(insertItem.lastInsertRowid);
         }
-        await db.execute({
-          sql: 'INSERT INTO user_items (userId, itemId) VALUES (?, ?)',
-          args: [userId, itemId]
-        });
+        
+        if (userId) {
+          await db.execute({
+            sql: 'INSERT INTO user_items (userId, itemId) VALUES (?, ?)',
+            args: [userId, itemId]
+          });
+        }
       } else if (type === 'ability') {
         let abQuery = await db.execute({ sql: 'SELECT id FROM abilities WHERE name = ?', args: [entry.name] });
         let abId;
@@ -215,21 +224,23 @@ app.post('/api/admin/bulk-import', async (req, res) => {
           const aCooldown = entry.cooldown || 0;
           const insertAb = await db.execute({
             sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl) VALUES (?, ?, ?, ?, ?, ?)',
-            args: [entry.name, entry.description || '', aType, aTarget, aCooldown, entry.iconUrl || null]
+            args: [entry.name, entry.description || '', aType, aTarget, aCooldown, iconUrl]
           });
           abId = Number(insertAb.lastInsertRowid);
         }
         
-        const existingUa = await db.execute({
-          sql: 'SELECT id FROM user_abilities WHERE userId = ? AND abilityId = ?',
-          args: [userId, abId]
-        });
-        
-        if (existingUa.rows.length === 0) {
-          await db.execute({
-            sql: 'INSERT INTO user_abilities (userId, abilityId, lastUsedAt) VALUES (?, ?, 0)',
+        if (userId) {
+          const existingUa = await db.execute({
+            sql: 'SELECT id FROM user_abilities WHERE userId = ? AND abilityId = ?',
             args: [userId, abId]
           });
+          
+          if (existingUa.rows.length === 0) {
+            await db.execute({
+              sql: 'INSERT INTO user_abilities (userId, abilityId, lastUsedAt) VALUES (?, ?, 0)',
+              args: [userId, abId]
+            });
+          }
         }
       }
     }
