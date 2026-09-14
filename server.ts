@@ -14,7 +14,7 @@ const io = new Server(server, {
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Initialize SQLite Database
 const db = createClient({
@@ -29,6 +29,7 @@ async function initDB() {
       password TEXT,
       role TEXT,
       fullname TEXT,
+      nickname TEXT,
       photoUrl TEXT
     );
   `);
@@ -36,9 +37,10 @@ async function initDB() {
   // Safe column add for existing databases
   try {
     await db.execute('ALTER TABLE users ADD COLUMN fullname TEXT;');
-  } catch (e) {
-    // Column might already exist, ignore error
-  }
+  } catch (e) {}
+  try {
+    await db.execute('ALTER TABLE users ADD COLUMN nickname TEXT;');
+  } catch (e) {}
   await db.execute(`
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -254,7 +256,7 @@ app.post('/api/auth/verify', async (req, res) => {
 
 app.get('/api/state', async (req, res) => {
   try {
-    const users = (await db.execute('SELECT id, username, role, photoUrl FROM users')).rows;
+    const users = (await db.execute('SELECT id, username, role, photoUrl, fullname, nickname FROM users')).rows;
     const items = (await db.execute('SELECT * FROM items')).rows;
     const abilities = (await db.execute('SELECT * FROM abilities')).rows;
     const userItems = (await db.execute('SELECT * FROM user_items')).rows;
@@ -437,20 +439,30 @@ app.post('/api/admin/update-photo', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/admin/set-nickname', async (req, res) => {
+  const { userId, nickname } = req.body;
+  await db.execute({
+    sql: 'UPDATE users SET nickname = ? WHERE id = ?',
+    args: [nickname, userId]
+  });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
 // Student Actions
 app.post('/api/action/use-item', async (req, res) => {
   const { userId, userItemId } = req.body;
   
   // Find item details to log
   const ui = await db.execute({
-    sql: 'SELECT itemId, users.username FROM user_items JOIN users ON users.id = user_items.userId WHERE user_items.id = ?',
+    sql: 'SELECT itemId, users.username, users.fullname, users.nickname FROM user_items JOIN users ON users.id = user_items.userId WHERE user_items.id = ?',
     args: [userItemId]
   });
   
   if (ui.rows.length === 0) return res.status(404).json({ error: 'Not found' });
   
   const itemId = ui.rows[0].itemId;
-  const username = ui.rows[0].username;
+  const username = ui.rows[0].nickname || ui.rows[0].fullname || ui.rows[0].username;
   
   const item = await db.execute({ sql: 'SELECT name FROM items WHERE id = ?', args: [itemId] });
   const itemName = item.rows[0].name;
@@ -466,13 +478,15 @@ app.post('/api/action/use-ability', async (req, res) => {
   const { userId, userAbilityId, targetId } = req.body;
   
   const ua = await db.execute({
-    sql: 'SELECT abilityId, lastUsedAt, users.username FROM user_abilities JOIN users ON users.id = user_abilities.userId WHERE user_abilities.id = ?',
+    sql: 'SELECT abilityId, lastUsedAt, users.username, users.fullname, users.nickname FROM user_abilities JOIN users ON users.id = user_abilities.userId WHERE user_abilities.id = ?',
     args: [userAbilityId]
   });
   
   if (ua.rows.length === 0) return res.status(404).json({ error: 'Not found' });
   
-  const { abilityId, lastUsedAt, username } = ua.rows[0];
+  const { abilityId, lastUsedAt } = ua.rows[0];
+  const username = ua.rows[0].nickname || ua.rows[0].fullname || ua.rows[0].username;
+
   const abilityInfo = await db.execute({ sql: 'SELECT name, target, cooldown, type FROM abilities WHERE id = ?', args: [abilityId] });
   const ability = abilityInfo.rows[0];
   
@@ -491,8 +505,8 @@ app.post('/api/action/use-ability', async (req, res) => {
   });
   
   if (ability.target === 'ally' && targetId) {
-    const targetInfo = await db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [targetId] });
-    const targetName = targetInfo.rows.length > 0 ? targetInfo.rows[0].username : 'Неизвестная цель';
+    const targetInfo = await db.execute({ sql: 'SELECT username, fullname, nickname FROM users WHERE id = ?', args: [targetId] });
+    const targetName = targetInfo.rows.length > 0 ? (targetInfo.rows[0].nickname || targetInfo.rows[0].fullname || targetInfo.rows[0].username) : 'Неизвестная цель';
     await logAction(`[${username}] применил способность на [${targetName}]: [${ability.name}]`);
   } else {
     await logAction(`[${username}] использовал способность: [${ability.name}]`);

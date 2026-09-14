@@ -65,7 +65,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full"></div>
                     )}
                   </div>
-                  <span className="text-zinc-200 font-serif flex-1">{s.username}</span>
+                  <span className="text-zinc-200 font-serif flex-1">{s.nickname || s.fullname || s.username}</span>
                 </button>
               );
             })}
@@ -133,8 +133,15 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
 
 function StudentProfile({ adminView, student, state, onClose }: { adminView?: boolean, student: User, state: GameState, onClose: () => void }) {
   const [photoUrl, setPhotoUrl] = useState(student.photoUrl || '');
+  const [nickname, setNickname] = useState(student.nickname || '');
   const [isGiveItemOpen, setIsGiveItemOpen] = useState(false);
   const [isTeachAbilityOpen, setIsTeachAbilityOpen] = useState(false);
+
+  // Sync state when student prop changes
+  React.useEffect(() => {
+    setPhotoUrl(student.photoUrl || '');
+    setNickname(student.nickname || '');
+  }, [student]);
 
   const studentItems = state.userItems.filter(ui => ui.userId === student.id).map(ui => {
     const item = state.items.find(i => i.id === ui.itemId);
@@ -154,6 +161,16 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
     });
   };
 
+  const handleUpdateNickname = async () => {
+    await fetch('/api/admin/set-nickname', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: student.id, nickname })
+    });
+  };
+
+  const displayName = student.nickname || student.fullname || student.username;
+
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex-1 flex flex-col overflow-hidden">
       <div className="bg-zinc-950 p-4 border-b border-zinc-800 flex justify-between items-start">
@@ -166,19 +183,45 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
             </div>
           )}
           <div>
-            <h2 className="font-serif text-2xl text-red-50 font-medium">{student.username}</h2>
-            <div className="text-zinc-500 text-sm">Ученик</div>
+            <h2 className="font-serif text-2xl text-red-50 font-medium">{displayName}</h2>
+            <div className="text-zinc-500 text-sm">Ученик ({student.username})</div>
           </div>
         </div>
         <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">Закрыть</button>
       </div>
 
       <div className="p-4 flex-1 overflow-y-auto space-y-6">
-        <div className="space-y-2">
-          <label className="text-xs text-amber-500/80 uppercase tracking-wider font-semibold">Photo URL</label>
-          <div className="flex gap-2">
-            <Input value={photoUrl} onChange={e => setPhotoUrl(e.target.value)} placeholder="https://..." />
-            <Button onClick={handleUpdatePhoto} variant="secondary">Сохранить</Button>
+        <div className="space-y-4 bg-zinc-950/50 p-4 border border-zinc-800 rounded-sm">
+          <div className="space-y-2">
+            <label className="text-xs text-amber-500/80 uppercase tracking-wider font-semibold">Игровой никнейм</label>
+            <div className="flex gap-2">
+              <Input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="Например: Темный лорд" />
+              <Button onClick={handleUpdateNickname} variant="secondary">Сохранить</Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-amber-500/80 uppercase tracking-wider font-semibold">Фото (URL или загрузка)</label>
+            <div className="flex gap-2">
+              <Input value={photoUrl} onChange={e => setPhotoUrl(e.target.value)} placeholder="https://..." />
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                id={`photo-upload-${student.id}`} 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => setPhotoUrl(event.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                }} 
+              />
+              <Button onClick={() => document.getElementById(`photo-upload-${student.id}`)?.click()} variant="secondary" className="px-3" title="Загрузить">
+                <Upload size={16} />
+              </Button>
+              <Button onClick={handleUpdatePhoto} variant="secondary">Сохранить</Button>
+            </div>
           </div>
         </div>
 

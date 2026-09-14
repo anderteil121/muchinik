@@ -3,6 +3,8 @@ export interface User {
   username: string;
   role: 'admin' | 'student';
   photoUrl: string | null;
+  fullname?: string;
+  nickname?: string;
 }
 
 export interface Item {

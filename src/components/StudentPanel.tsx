@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
-import { Button, Modal, Select, Tooltip } from './ui';
+import { Button, Modal, Select, Tooltip, Input } from './ui';
 import { format } from 'date-fns';
 import { UserCircle, Clock } from 'lucide-react';
 
@@ -65,8 +65,8 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
                 </div>
               )}
               <div>
-                <h2 className="font-serif text-3xl text-red-50 font-medium tracking-wide">{user.username}</h2>
-                <div className="text-amber-500/80 font-serif italic text-sm mt-1">Ученик академии</div>
+                <h2 className="font-serif text-3xl text-red-50 font-medium tracking-wide">{user.nickname || user.fullname || user.username}</h2>
+                <div className="text-amber-500/80 font-serif italic text-sm mt-1">Ученик академии ({user.username})</div>
               </div>
           </div>
         </div>
@@ -241,20 +241,34 @@ function AbilityCard({ ua, ability, onUse }: { ua: any, ability: any, onUse: () 
 
 function TargetSelectionModal({ isOpen, onClose, students, onSelect, onlineUserIds }: { isOpen: boolean, onClose: () => void, students: User[], onSelect: (id: number) => void, onlineUserIds: number[] }) {
   const [targetId, setTargetId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredStudents = students.filter(s => {
+    const term = searchQuery.toLowerCase();
+    const fio = (s.fullname || '').toLowerCase();
+    const email = (s.username || '').toLowerCase();
+    const nick = (s.nickname || '').toLowerCase();
+    return fio.includes(term) || email.includes(term) || nick.includes(term);
+  });
 
   useEffect(() => {
-    if (isOpen && students.length > 0) {
-      setTargetId(students[0].id.toString());
+    if (isOpen && filteredStudents.length > 0 && !filteredStudents.find(s => s.id.toString() === targetId)) {
+      setTargetId(filteredStudents[0].id.toString());
     }
-  }, [isOpen, students]);
+  }, [isOpen, filteredStudents, targetId]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Выберите цель">
       <div className="space-y-4">
+        <Input 
+          placeholder="Поиск по ФИО, нику или почте..." 
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
         <Select value={targetId} onChange={e => setTargetId(e.target.value)}>
-          {students.map(s => (
+          {filteredStudents.map(s => (
             <option key={s.id} value={s.id}>
-              {s.username} {onlineUserIds.includes(s.id) ? ' (Онлайн)' : ''}
+              {s.nickname || s.fullname || s.username} {onlineUserIds.includes(s.id) ? ' (Онлайн)' : ''}
             </option>
           ))}
         </Select>
