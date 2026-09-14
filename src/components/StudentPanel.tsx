@@ -3,6 +3,7 @@ import { User, GameState } from '../types';
 import { Button, Modal, Select, Tooltip, Input } from './ui';
 import { format } from 'date-fns';
 import { UserCircle, Clock } from 'lucide-react';
+import { LogMessage } from './LogMessage';
 
 interface StudentPanelProps {
   state: GameState;
@@ -11,6 +12,7 @@ interface StudentPanelProps {
 
 export function StudentPanel({ state, user }: StudentPanelProps) {
   const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId: number, userAbilityId: number } | null>(null);
+  const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number } | null>(null);
 
   const studentItems = state.userItems.filter(ui => ui.userId === user.id).map(ui => {
     const item = state.items.find(i => i.id === ui.itemId);
@@ -39,12 +41,42 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
       return;
     }
 
+    const chance = ability.successChance !== undefined ? ability.successChance : 100;
+    
+    if (chance < 100) {
+      // Open roulette modal
+      setTargetModalOpen(null);
+      setRouletteState({
+        userAbilityId,
+        abilityId,
+        targetId,
+        chance
+      });
+      return;
+    }
+
+    // 100% chance, no roulette
     await fetch('/api/action/use-ability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, userAbilityId, targetId })
+      body: JSON.stringify({ userId: user.id, userAbilityId, targetId, outcome: 'success' })
     });
     setTargetModalOpen(null);
+  };
+
+  const handleRouletteFinish = async (outcome: 'success' | 'fail') => {
+    if (!rouletteState) return;
+    await fetch('/api/action/use-ability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        userId: user.id, 
+        userAbilityId: rouletteState.userAbilityId, 
+        targetId: rouletteState.targetId,
+        outcome 
+      })
+    });
+    setRouletteState(null);
   };
 
   return (
@@ -133,7 +165,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
                 {format(new Date(log.createdAt), 'HH:mm:ss')}
               </div>
               <div className="text-zinc-300">
-                {log.message}
+                <LogMessage message={log.message} state={state} />
               </div>
             </div>
           ))}
@@ -153,6 +185,12 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
             handleUseAbility(targetModalOpen.userAbilityId, targetModalOpen.abilityId, targetId);
           }
         }}
+      />
+
+      <RouletteModal 
+        isOpen={!!rouletteState} 
+        chance={rouletteState?.chance || 100}
+        onFinish={handleRouletteFinish}
       />
     </div>
   );
@@ -224,16 +262,14 @@ function AbilityCard({ ua, ability, onUse }: { ua: any, ability: any, onUse: () 
           </div>
         </div>
         
-        {ability.type === 'active' && (
-          <Button 
-            onClick={onUse} 
-            disabled={!isReady}
-            variant="secondary"
-            className={`opacity-0 group-hover:opacity-100 transition-opacity ${!isReady ? 'hidden' : ''}`}
-          >
-            Использовать
-          </Button>
-        )}
+        <Button 
+          onClick={onUse} 
+          disabled={!isReady}
+          variant="secondary"
+          className={`opacity-0 group-hover:opacity-100 transition-opacity ${!isReady ? 'hidden' : ''}`}
+        >
+          {ability.type === 'active' ? 'Использовать' : 'Применить'}
+        </Button>
       </div>
     </Tooltip>
   );
@@ -273,6 +309,88 @@ function TargetSelectionModal({ isOpen, onClose, students, onSelect, onlineUserI
           ))}
         </Select>
         <Button onClick={() => onSelect(Number(targetId))} className="w-full" disabled={!targetId}>Применить</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function RouletteModal({ isOpen, chance, onFinish }: { isOpen: boolean, chance: number, onFinish: (outcome: 'success' | 'fail') => void }) {
+  const [spinning, setSpinning] = useState(false);
+  const [result, setResult] = useState<'success' | 'fail' | null>(null);
+  const [items, setItems] = useState<string[]>([]);
+  const [spinOffset, setSpinOffset] = useState(0);
+  
+  useEffect(() => {
+    if (isOpen) {
+      const isSuccess = Math.random() * 100 <= chance;
+      const outcome = isSuccess ? 'success' : 'fail';
+      
+      // Generate 40 random items, and 1 final result item
+      const newItems = Array.from({ length: 40 }).map(() => Math.random() > 0.5 ? 'success' : 'fail');
+      newItems.push(outcome);
+      setItems(newItems);
+      
+      setResult(null);
+      setSpinning(true);
+      
+      // Start position: top of the list
+      // 41 items total (1640px high). Middle is 0. 
+      // Top item is at +800px. Bottom item (result) is at -800px.
+      setSpinOffset(800);
+      
+      const t1 = setTimeout(() => {
+        // Trigger the spin animation to the bottom item
+        setSpinOffset(-800);
+      }, 50);
+      
+      const t2 = setTimeout(() => {
+        setSpinning(false);
+        setResult(outcome);
+        
+        setTimeout(() => {
+          onFinish(outcome);
+        }, 1500);
+      }, 3050); // 3 seconds spin + 50ms delay
+      
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    } else {
+      setSpinOffset(0);
+    }
+  }, [isOpen, chance]); // Added chance to deps (though it rarely changes while open)
+
+  return (
+    <Modal isOpen={isOpen} onClose={() => {}} title="Проверка шанса...">
+      <div className="flex flex-col items-center justify-center p-6 space-y-8 overflow-hidden">
+        <div className="text-zinc-400 text-sm">Шанс успеха: <span className="text-amber-500 font-medium">{chance}%</span></div>
+        
+        <div className="relative w-full h-32 bg-zinc-950 border border-zinc-800 rounded-sm overflow-hidden flex items-center justify-center shadow-inner">
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/90 via-transparent to-zinc-950/90 z-10 pointer-events-none" />
+          <div className="absolute left-0 right-0 h-0.5 bg-red-900/50 z-10 top-1/2 transform -translate-y-1/2" />
+          
+          <div 
+            className={`flex flex-col items-center text-3xl font-serif tracking-widest ${spinning ? 'transition-transform duration-[3000ms] ease-[cubic-bezier(0.25,1,0.5,1)]' : ''}`}
+            style={{ transform: `translateY(${spinOffset}px)` }}
+          >
+            {items.map((item, i) => {
+              const isFinal = i === items.length - 1;
+              const isHighlighted = isFinal && result !== null;
+              
+              let colorClass = item === 'success' ? 'text-green-500/40' : 'text-red-500/40';
+              if (isHighlighted) {
+                colorClass = result === 'success' ? 'text-green-500 font-bold scale-110 transition-transform' : 'text-red-500 font-bold scale-110 transition-transform';
+              }
+
+              return (
+                <div key={i} className={`h-10 flex items-center justify-center ${colorClass}`}>
+                  {item === 'success' ? 'УСПЕХ' : 'ПРОВАЛ'}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </Modal>
   );

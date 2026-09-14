@@ -3,6 +3,7 @@ import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
 import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database } from 'lucide-react';
+import { LogMessage } from './LogMessage';
 
 interface AdminPanelProps {
   state: GameState;
@@ -109,7 +110,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
                     {format(new Date(log.createdAt), 'HH:mm:ss')}
                   </div>
                   <div className="text-zinc-300">
-                    {log.message}
+                    <LogMessage message={log.message} state={state} />
                   </div>
                 </div>
               ))}
@@ -376,6 +377,7 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
   const [type, setType] = useState('active');
   const [target, setTarget] = useState('self');
   const [cooldown, setCooldown] = useState('10');
+  const [successChance, setSuccessChance] = useState('100');
 
   React.useEffect(() => {
     if (isOpen) {
@@ -385,6 +387,7 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
       setType(initialData?.type || 'active');
       setTarget(initialData?.target || 'self');
       setCooldown(initialData?.cooldown ? String(initialData.cooldown) : '10');
+      setSuccessChance(initialData?.successChance !== undefined ? String(initialData.successChance) : '100');
     }
   }, [isOpen, initialData]);
 
@@ -403,9 +406,9 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
     await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl, successChance: Number(successChance) })
     });
-    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); }
+    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); setSuccessChance('100'); }
     onClose();
   };
 
@@ -447,6 +450,11 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
             <Input type="number" min="0" value={cooldown} onChange={e => setCooldown(e.target.value)} />
           </div>
         )}
+
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">Шанс успеха (%)</label>
+          <Input type="number" min="1" max="100" value={successChance} onChange={e => setSuccessChance(e.target.value)} />
+        </div>
 
         <Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
       </div>

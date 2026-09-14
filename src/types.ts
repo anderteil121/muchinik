@@ -22,6 +22,7 @@ export interface Ability {
   target: 'self' | 'ally';
   cooldown: number;
   iconUrl?: string;
+  successChance?: number;
 }
 
 export interface UserItem {

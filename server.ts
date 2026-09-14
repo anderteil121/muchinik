@@ -57,12 +57,14 @@ async function initDB() {
       type TEXT,
       target TEXT,
       cooldown INTEGER,
-      iconUrl TEXT
+      iconUrl TEXT,
+      successChance INTEGER DEFAULT 100
     );
   `);
 
   // Migrate existing tables
   try { await db.execute('ALTER TABLE items ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE abilities ADD COLUMN successChance INTEGER DEFAULT 100;'); } catch (e) { /* Ignore if exists */ }
   try { await db.execute('ALTER TABLE abilities ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
 
   await db.execute(`
@@ -361,10 +363,10 @@ app.post('/api/admin/edit-item', async (req, res) => {
 });
 
 app.post('/api/admin/edit-ability', async (req, res) => {
-  const { id, name, description, type, target, cooldown, iconUrl } = req.body;
+  const { id, name, description, type, target, cooldown, iconUrl, successChance } = req.body;
   await db.execute({
-    sql: 'UPDATE abilities SET name = ?, description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ? WHERE id = ?',
-    args: [name, description, type, target, cooldown || 0, iconUrl || null, id]
+    sql: 'UPDATE abilities SET name = ?, description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ?, successChance = ? WHERE id = ?',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100, id]
   });
   io.emit('state_updated');
   res.json({ success: true });
@@ -381,10 +383,10 @@ app.post('/api/admin/create-item', async (req, res) => {
 });
 
 app.post('/api/admin/create-ability', async (req, res) => {
-  const { name, description, type, target, cooldown, iconUrl } = req.body;
+  const { name, description, type, target, cooldown, iconUrl, successChance } = req.body;
   await db.execute({
-    sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl) VALUES (?, ?, ?, ?, ?, ?)',
-    args: [name, description, type, target, cooldown || 0, iconUrl || null]
+    sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl, successChance) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100]
   });
   io.emit('state_updated');
   res.json({ success: true });
@@ -475,7 +477,7 @@ app.post('/api/action/use-item', async (req, res) => {
 });
 
 app.post('/api/action/use-ability', async (req, res) => {
-  const { userId, userAbilityId, targetId } = req.body;
+  const { userId, userAbilityId, targetId, outcome } = req.body;
   
   const ua = await db.execute({
     sql: 'SELECT abilityId, lastUsedAt, users.username, users.fullname, users.nickname FROM user_abilities JOIN users ON users.id = user_abilities.userId WHERE user_abilities.id = ?',
@@ -503,13 +505,24 @@ app.post('/api/action/use-ability', async (req, res) => {
     sql: 'UPDATE user_abilities SET lastUsedAt = ? WHERE id = ?',
     args: [Date.now(), userAbilityId]
   });
+
+  const isFail = outcome === 'fail';
+  const typeText = ability.type === 'passive' ? 'пассивную способность' : 'способность';
   
   if (ability.target === 'ally' && targetId) {
     const targetInfo = await db.execute({ sql: 'SELECT username, fullname, nickname FROM users WHERE id = ?', args: [targetId] });
     const targetName = targetInfo.rows.length > 0 ? (targetInfo.rows[0].nickname || targetInfo.rows[0].fullname || targetInfo.rows[0].username) : 'Неизвестная цель';
-    await logAction(`[${username}] применил способность на [${targetName}]: [${ability.name}]`);
+    if (isFail) {
+      await logAction(`[${username}] попытался применить ${typeText} на [${targetName}]: [${ability.name}], но потерпел неудачу!`);
+    } else {
+      await logAction(`[${username}] применил ${typeText} на [${targetName}]: [${ability.name}]`);
+    }
   } else {
-    await logAction(`[${username}] использовал способность: [${ability.name}]`);
+    if (isFail) {
+      await logAction(`[${username}] попытался использовать ${typeText} [${ability.name}], но потерпел неудачу!`);
+    } else {
+      await logAction(`[${username}] использовал ${typeText}: [${ability.name}]`);
+    }
   }
   
   res.json({ success: true });

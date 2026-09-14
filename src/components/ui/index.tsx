@@ -69,7 +69,7 @@ export function Tooltip({ content, children, align = 'right' }: { content: React
       })}
       {rect && typeof window !== 'undefined' && createPortal(
         <div 
-          className="fixed z-[99999] w-48 bg-zinc-900 border border-zinc-700 p-2 text-xs text-zinc-300 rounded-sm shadow-2xl pointer-events-none animate-in fade-in duration-100"
+          className="fixed z-[99999] max-w-xs w-max bg-zinc-900 border border-zinc-700 p-2 text-xs text-zinc-300 rounded-sm shadow-2xl pointer-events-none animate-in fade-in duration-100"
           style={{
             top: rect.top + rect.height / 2,
             left: align === 'left' ? rect.left - 8 : rect.right + 8,
