@@ -164,12 +164,13 @@ export default function App() {
     );
   }
 
+  const currentUser = state.users.find(u => u.id === user.id) || user;
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 font-sans flex flex-col relative">
       <header className="bg-zinc-950 border-b border-red-900/30 py-3 px-6 flex justify-between items-center relative z-10 shrink-0">
         <h1 className="font-serif text-2xl text-amber-500/90 tracking-widest font-bold uppercase">Мученики</h1>
         <div className="flex items-center gap-4">
-          {user.role === 'admin' && (
+          {currentUser.role === 'admin' && (
             <Button variant="secondary" onClick={() => setPlayMode(!playMode)} className="text-xs px-3 py-1 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
               {playMode ? 'Панель Мастера' : 'Игровой режим'}
             </Button>
@@ -177,8 +178,8 @@ export default function App() {
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
             <div className="text-sm text-zinc-500 flex items-center gap-2">
-              <span className="text-zinc-300">{user.nickname || user.fullname || user.username}</span>
-              <span className="opacity-50">({user.role === 'admin' ? 'Мастер' : 'Ученик'})</span>
+              <span className="text-zinc-300">{currentUser.nickname || currentUser.fullname || currentUser.username}</span>
+              <span className="opacity-50">({currentUser.role === 'admin' ? 'Мастер' : 'Ученик'})</span>
             </div>
           </div>
           <Button variant="secondary" onClick={() => {
@@ -192,10 +193,10 @@ export default function App() {
       </header>
 
       <main className="flex-1 relative z-0">
-        {user.role === 'admin' && !playMode ? (
-          <AdminPanel state={state} admin={user} />
+        {currentUser.role === 'admin' && !playMode ? (
+          <AdminPanel state={state} admin={currentUser} />
         ) : (
-          <StudentPanel state={state} user={user} />
+          <StudentPanel state={state} user={currentUser} />
         )}
       </main>
     </div>

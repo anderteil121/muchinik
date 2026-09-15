@@ -246,8 +246,8 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
           <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
           <Clock size={18} className="text-zinc-500" />
         </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10 max-h-[300px] md:max-h-[600px]">
-          {state.logs.map(log => (
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 z-10 max-h-[300px] md:max-h-[600px]">
+          {[...state.logs].reverse().map(log => (
             <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm shadow-sm">
               <div className="text-zinc-500 text-xs mb-1 font-mono">
                 {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm')}

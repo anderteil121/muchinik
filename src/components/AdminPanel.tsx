@@ -120,7 +120,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
       {/* Middle/Right Column - Profile or Logs */}
       <div className="w-full md:w-2/3 flex flex-col gap-6">
         {selectedStudent ? (
-          <StudentProfile adminView student={selectedStudent} state={state} onClose={() => setSelectedStudent(null)} />
+          <StudentProfile adminView student={state.users.find(u => u.id === selectedStudent.id) || selectedStudent} state={state} onClose={() => setSelectedStudent(null)} />
         ) : (
           <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex-1 flex flex-col overflow-hidden relative max-h-[400px] md:max-h-none">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-zinc-900 to-zinc-900 pointer-events-none" />
@@ -133,8 +133,8 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
                 <Clock size={18} className="text-zinc-500" />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10 max-h-[300px] md:max-h-[600px]">
-              {state.logs.map(log => (
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 z-10 max-h-[300px] md:max-h-[600px]">
+              {[...state.logs].reverse().map(log => (
                 <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm">
                   <div className="text-zinc-500 text-xs mb-1 font-mono">
                     {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm')}
@@ -299,7 +299,9 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-sm py-1 pl-7 pr-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50"
                   />
                 </div>
-                <Button onClick={() => setIsGiveItemOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Выдать</Button>
+                {student.role !== 'admin' && (
+                  <Button onClick={() => setIsGiveItemOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Выдать</Button>
+                )}
               </div>
             </div>
             <div className="space-y-2 overflow-y-auto pr-1 flex-1">
@@ -365,7 +367,9 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
                     </>
                   )}
                 </div>
-                <Button onClick={() => setIsTeachAbilityOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Обучить</Button>
+                {student.role !== 'admin' && (
+                  <Button onClick={() => setIsTeachAbilityOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Обучить</Button>
+                )}
               </div>
             </div>
             <div className="space-y-2 overflow-y-auto pr-1 flex-1">
