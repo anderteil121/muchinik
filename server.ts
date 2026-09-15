@@ -468,6 +468,12 @@ app.post('/api/admin/set-nickname', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/admin/clear-logs', async (req, res) => {
+  await db.execute('DELETE FROM logs');
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
 // Student Actions
 app.post('/api/action/use-item', async (req, res) => {
   const { userId, userItemId } = req.body;

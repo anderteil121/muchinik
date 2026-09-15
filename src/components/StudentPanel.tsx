@@ -250,7 +250,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
           {state.logs.map(log => (
             <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm shadow-sm">
               <div className="text-zinc-500 text-xs mb-1 font-mono">
-                {format(new Date(log.createdAt), 'HH:mm:ss')}
+                {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm')}
               </div>
               <div className="text-zinc-300">
                 <LogMessage message={log.message} state={state} />

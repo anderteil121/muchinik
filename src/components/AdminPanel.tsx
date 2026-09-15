@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2 } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 
 interface AdminPanelProps {
@@ -22,12 +22,37 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
   const onlineSet = new Set(state.onlineUserIds || []);
   const filteredStudents = students.filter(s => filterOnline ? onlineSet.has(s.id) : true);
 
+  const handleClearLogs = async () => {
+    if (!confirm('Вы уверены, что хотите очистить все логи?')) return;
+    await fetch('/api/admin/clear-logs', { method: 'POST' });
+  };
+
   return (
     <div className="flex flex-col md:flex-row h-full w-full max-w-7xl mx-auto gap-6 p-4">
       
       {/* Left Column - Students List */}
       <div className="w-full md:w-1/3 flex flex-col gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col h-1/2">
+        {/* Admin Profile Button */}
+        <button 
+          onClick={() => setSelectedStudent(admin)}
+          className={`w-full text-left p-3 border rounded-sm flex items-center gap-3 transition-colors ${selectedStudent?.id === admin.id ? 'bg-zinc-800 border-amber-500/50' : 'bg-zinc-900 border-zinc-800 hover:border-amber-500/30'}`}
+        >
+          <div className="relative flex-shrink-0">
+            {admin.photoUrl ? (
+              <img src={admin.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-amber-500/50" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-zinc-950 flex items-center justify-center border border-amber-500/50 text-amber-500/50">
+                <Settings size={20} />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-amber-500 font-serif truncate">{admin.nickname || admin.fullname || admin.username}</div>
+            <div className="text-[10px] uppercase tracking-widest text-zinc-500">Архимаг (Мой профиль)</div>
+          </div>
+        </button>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col min-h-[250px] flex-1">
           <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex flex-col gap-2">
             <h2 className="font-serif text-lg text-amber-500/90 font-medium">Ученики ({filteredStudents.length})</h2>
             <div className="flex gap-2 text-xs">
@@ -101,13 +126,18 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-zinc-900 to-zinc-900 pointer-events-none" />
             <div className="bg-zinc-950/80 p-4 border-b border-zinc-800 flex items-center justify-between z-10">
               <h2 className="font-serif text-xl text-amber-500/90 font-medium tracking-wide">Arcane Logs</h2>
-              <Clock size={18} className="text-zinc-500" />
+              <div className="flex gap-3 items-center">
+                <button onClick={handleClearLogs} className="text-zinc-500 hover:text-red-500 transition-colors" title="Очистить логи">
+                  <Trash2 size={18} />
+                </button>
+                <Clock size={18} className="text-zinc-500" />
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-3 z-10 max-h-[300px] md:max-h-[600px]">
               {state.logs.map(log => (
                 <div key={log.id} className="text-sm p-3 bg-zinc-950/50 border border-zinc-800/50 rounded-sm">
                   <div className="text-zinc-500 text-xs mb-1 font-mono">
-                    {format(new Date(log.createdAt), 'HH:mm:ss')}
+                    {format(new Date(log.createdAt), 'dd.MM.yyyy HH:mm')}
                   </div>
                   <div className="text-zinc-300">
                     <LogMessage message={log.message} state={state} />
@@ -213,7 +243,7 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
           )}
           <div>
             <h2 className="font-serif text-2xl text-red-50 font-medium">{displayName}</h2>
-            <div className="text-zinc-500 text-sm">Ученик ({student.username})</div>
+            <div className="text-zinc-500 text-sm">{student.role === 'admin' ? 'Архимаг' : 'Ученик'} ({student.username})</div>
           </div>
         </div>
         <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">Закрыть</button>
@@ -507,8 +537,16 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
 
 function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean, onClose: () => void, studentId: number, items: any[] }) {
   const [itemId, setItemId] = useState<number | ''>('');
+  const [search, setSearch] = useState('');
   
-  React.useEffect(() => { if (!isOpen) setItemId(''); }, [isOpen]);
+  React.useEffect(() => { 
+    if (!isOpen) {
+      setItemId(''); 
+      setSearch('');
+    }
+  }, [isOpen]);
+
+  const filteredItems = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
 
   const submit = async () => {
     if (!itemId) return;
@@ -523,24 +561,35 @@ function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Выдать предмет">
       <div className="space-y-4">
+        <div className="relative">
+          <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <input 
+            type="text" 
+            placeholder="Поиск предмета..." 
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1.5 pl-7 pr-2 text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50"
+          />
+        </div>
         <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-          {items.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setItemId(item.id)}
-              className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
-                itemId === item.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
-              }`}
-            >
-              {item.iconUrl ? (
-                <img src={item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-700" />
-              ) : (
-                <div className="w-10 h-10 bg-zinc-950 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
-              )}
-              <div className="flex-1 font-medium text-red-100">{item.name}</div>
-            </button>
+          {filteredItems.map(item => (
+            <Tooltip key={item.id} align="right" content={item.description}>
+              <button
+                onClick={() => setItemId(item.id)}
+                className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
+                  itemId === item.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
+                }`}
+              >
+                {item.iconUrl ? (
+                  <img src={item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-700" />
+                ) : (
+                  <div className="w-10 h-10 bg-zinc-950 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
+                )}
+                <div className="flex-1 font-medium text-red-100">{item.name}</div>
+              </button>
+            </Tooltip>
           ))}
-          {items.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Нет доступных предметов</div>}
+          {filteredItems.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">{items.length === 0 ? 'Нет доступных предметов' : 'Ничего не найдено'}</div>}
         </div>
         <Button onClick={submit} className="w-full" disabled={!itemId}>Выдать</Button>
       </div>
@@ -550,8 +599,40 @@ function GiveItemModal({ isOpen, onClose, studentId, items }: { isOpen: boolean,
 
 function TeachAbilityModal({ isOpen, onClose, studentId, abilities }: { isOpen: boolean, onClose: () => void, studentId: number, abilities: any[] }) {
   const [abilityId, setAbilityId] = useState<number | ''>('');
+  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   
-  React.useEffect(() => { if (!isOpen) setAbilityId(''); }, [isOpen]);
+  React.useEffect(() => { 
+    if (!isOpen) {
+      setAbilityId(''); 
+      setSearch('');
+      setFilters([]);
+      setIsFilterOpen(false);
+    }
+  }, [isOpen]);
+
+  const toggleFilter = (filter: string) => {
+    setFilters(prev => 
+      prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]
+    );
+  };
+
+  const filteredAbilities = abilities.filter(ability => {
+    if (!ability.name.toLowerCase().includes(search.toLowerCase())) return false;
+    
+    if (filters.length === 0) return true;
+
+    let matches = false;
+    for (const filter of filters) {
+      if (filter === 'active' && ability.type === 'active') matches = true;
+      if (filter === 'passive' && ability.type === 'passive') matches = true;
+      if (filter === 'has_cd' && ability.cooldown && ability.cooldown > 0) matches = true;
+      if (filter === 'has_chance' && ability.successChance !== undefined && ability.successChance < 100) matches = true;
+    }
+    
+    return matches;
+  });
 
   const submit = async () => {
     if (!abilityId) return;
@@ -566,31 +647,88 @@ function TeachAbilityModal({ isOpen, onClose, studentId, abilities }: { isOpen: 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Обучить способности">
       <div className="space-y-4">
-        <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-          {abilities.map(ability => (
-            <button
-              key={ability.id}
-              onClick={() => setAbilityId(ability.id)}
-              className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
-                abilityId === ability.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
-              }`}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input 
+              type="text" 
+              placeholder="Поиск способности..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1.5 pl-7 pr-2 text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50"
+            />
+          </div>
+          <div className="relative">
+            <button 
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={`h-[34px] px-3 flex items-center justify-center rounded-sm border transition-colors ${filters.length > 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'}`}
             >
-              <div className="relative w-10 h-10 flex-shrink-0 border border-zinc-700 rounded-sm overflow-hidden bg-zinc-950 flex items-center justify-center">
-                {ability.iconUrl ? (
-                  <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-zinc-700 font-mono text-xs">?</span>
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-amber-200/90">{ability.name}</div>
-                <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-                  {ability.type === 'active' ? 'Активная' : 'Пассивная'}
-                </div>
-              </div>
+              <Filter size={16} />
             </button>
+            
+            {isFilterOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-sm shadow-xl z-50 py-2 flex flex-col">
+                  <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                    <input type="checkbox" checked={filters.includes('active')} onChange={() => toggleFilter('active')} className="accent-amber-500" />
+                    Активные
+                  </label>
+                  <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                    <input type="checkbox" checked={filters.includes('passive')} onChange={() => toggleFilter('passive')} className="accent-amber-500" />
+                    Пассивные
+                  </label>
+                  <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                    <input type="checkbox" checked={filters.includes('has_cd')} onChange={() => toggleFilter('has_cd')} className="accent-amber-500" />
+                    С откатом (КД)
+                  </label>
+                  <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                    <input type="checkbox" checked={filters.includes('has_chance')} onChange={() => toggleFilter('has_chance')} className="accent-amber-500" />
+                    С шансом
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+          {filteredAbilities.map(ability => (
+            <Tooltip
+              key={ability.id}
+              align="right"
+              content={
+                <>
+                  {ability.description}
+                  {ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ability.cooldown} сек.</div>}
+                  {ability.successChance !== undefined && ability.successChance < 100 && (
+                    <div className="text-amber-400/80 mt-1">Шанс успеха: {ability.successChance}%</div>
+                  )}
+                </>
+              }
+            >
+              <button
+                onClick={() => setAbilityId(ability.id)}
+                className={`w-full text-left relative group p-2 bg-zinc-900/50 border rounded-sm flex items-center gap-3 transition-colors ${
+                  abilityId === ability.id ? 'border-amber-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-600'
+                }`}
+              >
+                <div className="relative w-10 h-10 flex-shrink-0 border border-zinc-700 rounded-sm overflow-hidden bg-zinc-950 flex items-center justify-center">
+                  {ability.iconUrl ? (
+                    <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-zinc-700 font-mono text-xs">?</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-amber-200/90">{ability.name}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+                    {ability.type === 'active' ? 'Активная' : 'Пассивная'}
+                  </div>
+                </div>
+              </button>
+            </Tooltip>
           ))}
-          {abilities.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Нет доступных способностей</div>}
+          {filteredAbilities.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">{abilities.length === 0 ? 'Нет доступных способностей' : 'Ничего не найдено'}</div>}
         </div>
         <Button onClick={submit} className="w-full" disabled={!abilityId}>Обучить</Button>
       </div>
@@ -671,21 +809,73 @@ function ImportJsonModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
 function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: () => void, state: GameState }) {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editingAbility, setEditingAbility] = useState<any>(null);
+  const [itemSearch, setItemSearch] = useState('');
+  const [abilitySearch, setAbilitySearch] = useState('');
+  const [abilityFilters, setAbilityFilters] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  React.useEffect(() => { 
+    if (!isOpen) {
+      setItemSearch('');
+      setAbilitySearch('');
+      setAbilityFilters([]);
+      setIsFilterOpen(false);
+    }
+  }, [isOpen]);
+
+  const toggleFilter = (filter: string) => {
+    setAbilityFilters(prev => 
+      prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]
+    );
+  };
+
+  const filteredItems = state.items.filter(i => i.name.toLowerCase().includes(itemSearch.toLowerCase()));
+  const filteredAbilities = state.abilities.filter(ability => {
+    if (!ability.name.toLowerCase().includes(abilitySearch.toLowerCase())) return false;
+    
+    if (abilityFilters.length === 0) return true;
+
+    let matches = false;
+    for (const filter of abilityFilters) {
+      if (filter === 'active' && ability.type === 'active') matches = true;
+      if (filter === 'passive' && ability.type === 'passive') matches = true;
+      if (filter === 'has_cd' && ability.cooldown && ability.cooldown > 0) matches = true;
+      if (filter === 'has_chance' && ability.successChance !== undefined && ability.successChance < 100) matches = true;
+    }
+    
+    return matches;
+  });
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Управление базой знаний">
       <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
         <div>
-          <h3 className="font-serif text-lg text-zinc-200 mb-3 sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10">Предметы ({state.items.length})</h3>
+          <div className="sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10 mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 className="font-serif text-lg text-zinc-200">Предметы ({filteredItems.length})</h3>
+            <div className="relative w-full sm:max-w-[200px]">
+              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <input 
+                type="text" 
+                placeholder="Поиск..." 
+                value={itemSearch}
+                onChange={e => setItemSearch(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1.5 pl-7 pr-2 text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50"
+              />
+            </div>
+          </div>
           <div className="space-y-2">
-            {state.items.map(item => (
+            {filteredItems.map(item => (
               <div key={item.id} className="relative group p-2 bg-zinc-900/50 border border-zinc-800 rounded-sm flex items-center gap-3">
                 {item.iconUrl ? (
                   <img src={item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
                 ) : (
                   <div className="w-10 h-10 bg-zinc-950 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
                 )}
-                <div className="flex-1 font-medium text-red-100">{item.name}</div>
+                <div className="flex-1 font-medium text-red-100">
+                  <Tooltip align="left" content={item.description}>
+                    <span className="cursor-help inline-block">{item.name}</span>
+                  </Tooltip>
+                </div>
                 <button 
                   onClick={() => setEditingItem(item)}
                   className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
@@ -695,14 +885,60 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                 </button>
               </div>
             ))}
-            {state.items.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
+            {filteredItems.length === 0 && <div className="text-zinc-600 text-sm">Ничего не найдено</div>}
           </div>
         </div>
 
         <div>
-          <h3 className="font-serif text-lg text-zinc-200 mb-3 sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10">Способности ({state.abilities.length})</h3>
+          <div className="sticky top-0 bg-zinc-950 py-2 border-b border-zinc-800 z-10 mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 className="font-serif text-lg text-zinc-200">Способности ({filteredAbilities.length})</h3>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-[200px]">
+                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="text" 
+                  placeholder="Поиск..." 
+                  value={abilitySearch}
+                  onChange={e => setAbilitySearch(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1.5 pl-7 pr-2 text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50"
+                />
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  className={`h-[34px] px-3 flex items-center justify-center rounded-sm border transition-colors ${abilityFilters.length > 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'}`}
+                >
+                  <Filter size={16} />
+                </button>
+                
+                {isFilterOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)} />
+                    <div className="absolute right-0 bottom-full mb-1 w-48 bg-zinc-900 border border-zinc-700 rounded-sm shadow-xl z-50 py-2 flex flex-col">
+                      <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                        <input type="checkbox" checked={abilityFilters.includes('active')} onChange={() => toggleFilter('active')} className="accent-amber-500" />
+                        Активные
+                      </label>
+                      <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                        <input type="checkbox" checked={abilityFilters.includes('passive')} onChange={() => toggleFilter('passive')} className="accent-amber-500" />
+                        Пассивные
+                      </label>
+                      <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                        <input type="checkbox" checked={abilityFilters.includes('has_cd')} onChange={() => toggleFilter('has_cd')} className="accent-amber-500" />
+                        С откатом (КД)
+                      </label>
+                      <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-800 cursor-pointer text-sm text-zinc-300 transition-colors">
+                        <input type="checkbox" checked={abilityFilters.includes('has_chance')} onChange={() => toggleFilter('has_chance')} className="accent-amber-500" />
+                        С шансом
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="space-y-2">
-            {state.abilities.map(ability => (
+            {filteredAbilities.map(ability => (
               <div key={ability.id} className="relative group p-2 bg-zinc-900/50 border border-zinc-800 rounded-sm flex items-center gap-3">
                 <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-950 flex items-center justify-center">
                   {ability.iconUrl ? (
@@ -712,7 +948,20 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="font-medium text-amber-200/90">{ability.name}</div>
+                  <Tooltip
+                    align="left"
+                    content={
+                      <>
+                        {ability.description}
+                        {ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ability.cooldown} сек.</div>}
+                        {ability.successChance !== undefined && ability.successChance < 100 && (
+                          <div className="text-amber-400/80 mt-1">Шанс успеха: {ability.successChance}%</div>
+                        )}
+                      </>
+                    }
+                  >
+                    <div className="font-medium text-amber-200/90 cursor-help inline-block">{ability.name}</div>
+                  </Tooltip>
                   <div className="text-[10px] uppercase tracking-widest text-zinc-500">
                     {ability.type === 'active' ? 'Активная' : 'Пассивная'}
                   </div>
@@ -726,7 +975,7 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                 </button>
               </div>
             ))}
-            {state.abilities.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
+            {filteredAbilities.length === 0 && <div className="text-zinc-600 text-sm">Ничего не найдено</div>}
           </div>
         </div>
       </div>
