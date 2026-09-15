@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 
 interface AdminPanelProps {
@@ -137,6 +137,16 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
   const [nickname, setNickname] = useState(student.nickname || '');
   const [isGiveItemOpen, setIsGiveItemOpen] = useState(false);
   const [isTeachAbilityOpen, setIsTeachAbilityOpen] = useState(false);
+  const [itemSearch, setItemSearch] = useState('');
+  const [abilitySearch, setAbilitySearch] = useState('');
+  const [abilityFilters, setAbilityFilters] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const toggleFilter = (filter: string) => {
+    setAbilityFilters(prev => 
+      prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]
+    );
+  };
 
   // Sync state when student prop changes
   React.useEffect(() => {
@@ -152,6 +162,24 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
   const studentAbilities = state.userAbilities.filter(ua => ua.userId === student.id).map(ua => {
     const ability = state.abilities.find(a => a.id === ua.abilityId);
     return { ...ua, ability };
+  });
+
+  const filteredItems = studentItems.filter(ui => ui.item?.name.toLowerCase().includes(itemSearch.toLowerCase()));
+  const filteredAbilities = studentAbilities.filter(ua => {
+    if (!ua.ability) return false;
+    if (!ua.ability.name.toLowerCase().includes(abilitySearch.toLowerCase())) return false;
+    
+    if (abilityFilters.length === 0) return true;
+
+    let matches = false;
+    for (const filter of abilityFilters) {
+      if (filter === 'active' && ua.ability.type === 'active') matches = true;
+      if (filter === 'passive' && ua.ability.type === 'passive') matches = true;
+      if (filter === 'has_cd' && ua.ability.cooldown && ua.ability.cooldown > 0) matches = true;
+      if (filter === 'has_chance' && ua.ability.successChance !== undefined && ua.ability.successChance < 100) matches = true;
+    }
+    
+    return matches;
   });
 
   const handleUpdatePhoto = async () => {
@@ -227,35 +255,91 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
+          <div className="space-y-3 flex flex-col max-h-[350px]">
+            <div className="flex justify-between items-center gap-2">
               <h3 className="font-serif text-lg text-zinc-200">Инвентарь</h3>
-              <Button onClick={() => setIsGiveItemOpen(true)} variant="secondary" className="text-xs py-1 px-2">Выдать предмет</Button>
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                <div className="relative w-full max-w-[120px]">
+                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Поиск..." 
+                    value={itemSearch}
+                    onChange={e => setItemSearch(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-sm py-1 pl-7 pr-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <Button onClick={() => setIsGiveItemOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Выдать</Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              {studentItems.map(ui => ui.item && (
+            <div className="space-y-2 overflow-y-auto pr-1 flex-1">
+              {filteredItems.map(ui => ui.item && (
                 <Tooltip key={ui.id} align="right" content={ui.item.description}>
                   <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
                     {ui.item.iconUrl ? (
-                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
+                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800 flex-shrink-0" />
                     ) : (
-                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs">?</div>
+                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
                     )}
-                    <div className="flex-1 font-medium text-red-100">{ui.item.name}</div>
+                    <div className="flex-1 font-medium text-red-100 truncate">{ui.item.name}</div>
                   </div>
                 </Tooltip>
               ))}
-              {studentItems.length === 0 && <div className="text-zinc-600 text-sm">Пусто</div>}
+              {filteredItems.length === 0 && <div className="text-zinc-600 text-sm">{studentItems.length === 0 ? 'Пусто' : 'Ничего не найдено'}</div>}
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
+          <div className="space-y-3 flex flex-col max-h-[350px]">
+            <div className="flex justify-between items-center gap-2">
               <h3 className="font-serif text-lg text-zinc-200">Способности</h3>
-              <Button onClick={() => setIsTeachAbilityOpen(true)} variant="secondary" className="text-xs py-1 px-2">Обучить</Button>
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                <div className="relative w-full max-w-[120px]">
+                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Поиск..." 
+                    value={abilitySearch}
+                    onChange={e => setAbilitySearch(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-sm py-1 pl-7 pr-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                    className={`h-[26px] px-2 flex items-center justify-center rounded-sm border transition-colors ${abilityFilters.length > 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'}`}
+                  >
+                    <Filter size={14} />
+                  </button>
+                  
+                  {isFilterOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-zinc-950 border border-zinc-800 rounded-sm shadow-xl z-50 py-2 flex flex-col">
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('active')} onChange={() => toggleFilter('active')} className="accent-amber-500" />
+                          Активные
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('passive')} onChange={() => toggleFilter('passive')} className="accent-amber-500" />
+                          Пассивные
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('has_cd')} onChange={() => toggleFilter('has_cd')} className="accent-amber-500" />
+                          С откатом (КД)
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('has_chance')} onChange={() => toggleFilter('has_chance')} className="accent-amber-500" />
+                          С шансом
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <Button onClick={() => setIsTeachAbilityOpen(true)} variant="secondary" className="text-xs py-1 px-2 flex-shrink-0">Обучить</Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              {studentAbilities.map(ua => ua.ability && (
+            <div className="space-y-2 overflow-y-auto pr-1 flex-1">
+              {filteredAbilities.map(ua => ua.ability && (
                 <Tooltip
                   key={ua.id}
                   align="left"
@@ -263,6 +347,9 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
                     <>
                       {ua.ability.description}
                       {ua.ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ua.ability.cooldown} сек.</div>}
+                      {ua.ability.successChance !== undefined && ua.ability.successChance < 100 && (
+                        <div className="text-amber-400/80 mt-1">Шанс успеха: {ua.ability.successChance}%</div>
+                      )}
                     </>
                   }
                 >
@@ -275,9 +362,8 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
                         <span className="text-zinc-700 font-mono text-xs">?</span>
                       )}
                     </div>
-
-                    <div className="flex-1">
-                      <div className="font-medium text-amber-200/90">{ua.ability.name}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-amber-200/90 truncate">{ua.ability.name}</div>
                       <div className="text-[10px] uppercase tracking-widest text-zinc-500">
                         {ua.ability.type === 'active' ? 'Активная' : 'Пассивная'}
                       </div>

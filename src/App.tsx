@@ -9,6 +9,7 @@ import quotesData from './data/quotes.json';
 export default function App() {
   const { state, fetchState } = useGameState();
   const [user, setUser] = useState<any>(null);
+  const [playMode, setPlayMode] = useState(false);
   const [quote] = useState(() => quotesData.length > 0 ? quotesData[Math.floor(Math.random() * quotesData.length)] : null);
 
   useEffect(() => {
@@ -168,6 +169,11 @@ export default function App() {
       <header className="bg-zinc-950 border-b border-red-900/30 py-3 px-6 flex justify-between items-center relative z-10 shrink-0">
         <h1 className="font-serif text-2xl text-amber-500/90 tracking-widest font-bold uppercase">Мученики</h1>
         <div className="flex items-center gap-4">
+          {user.role === 'admin' && (
+            <Button variant="secondary" onClick={() => setPlayMode(!playMode)} className="text-xs px-3 py-1 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
+              {playMode ? 'Панель Мастера' : 'Игровой режим'}
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
             <div className="text-sm text-zinc-500 flex items-center gap-2">
@@ -186,7 +192,7 @@ export default function App() {
       </header>
 
       <main className="flex-1 relative z-0">
-        {user.role === 'admin' ? (
+        {user.role === 'admin' && !playMode ? (
           <AdminPanel state={state} admin={user} />
         ) : (
           <StudentPanel state={state} user={user} />

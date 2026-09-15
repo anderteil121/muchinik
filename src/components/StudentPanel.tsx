@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Modal, Select, Tooltip, Input } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Clock } from 'lucide-react';
+import { UserCircle, Clock, Search, Filter } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 
 interface StudentPanelProps {
@@ -13,15 +13,47 @@ interface StudentPanelProps {
 export function StudentPanel({ state, user }: StudentPanelProps) {
   const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId: number, userAbilityId: number } | null>(null);
   const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number } | null>(null);
+  const [itemSearch, setItemSearch] = useState('');
+  const [abilitySearch, setAbilitySearch] = useState('');
+  const [abilityFilters, setAbilityFilters] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const studentItems = state.userItems.filter(ui => ui.userId === user.id).map(ui => {
-    const item = state.items.find(i => i.id === ui.itemId);
-    return { ...ui, item };
-  });
+  const toggleFilter = (filter: string) => {
+    setAbilityFilters(prev => 
+      prev.includes(filter) ? prev.filter(f => f !== filter) : [...prev, filter]
+    );
+  };
 
-  const studentAbilities = state.userAbilities.filter(ua => ua.userId === user.id).map(ua => {
-    const ability = state.abilities.find(a => a.id === ua.abilityId);
-    return { ...ua, ability };
+  const studentItems = user.role === 'admin' 
+    ? state.items.map(item => ({ id: `admin_item_${item.id}`, userId: user.id, itemId: item.id, item }))
+    : state.userItems.filter(ui => ui.userId === user.id).map(ui => {
+      const item = state.items.find(i => i.id === ui.itemId);
+      return { ...ui, item };
+    });
+
+  const studentAbilities = user.role === 'admin'
+    ? state.abilities.map(ability => ({ id: `admin_ab_${ability.id}`, userId: user.id, abilityId: ability.id, lastUsedAt: 0, ability }))
+    : state.userAbilities.filter(ua => ua.userId === user.id).map(ua => {
+      const ability = state.abilities.find(a => a.id === ua.abilityId);
+      return { ...ua, ability };
+    });
+
+  const filteredItems = studentItems.filter(ui => ui.item?.name.toLowerCase().includes(itemSearch.toLowerCase()));
+  const filteredAbilities = studentAbilities.filter(ua => {
+    if (!ua.ability) return false;
+    if (!ua.ability.name.toLowerCase().includes(abilitySearch.toLowerCase())) return false;
+    
+    if (abilityFilters.length === 0) return true;
+
+    let matches = false;
+    for (const filter of abilityFilters) {
+      if (filter === 'active' && ua.ability.type === 'active') matches = true;
+      if (filter === 'passive' && ua.ability.type === 'passive') matches = true;
+      if (filter === 'has_cd' && ua.ability.cooldown && ua.ability.cooldown > 0) matches = true;
+      if (filter === 'has_chance' && ua.ability.successChance !== undefined && ua.ability.successChance < 100) matches = true;
+    }
+    
+    return matches;
   });
 
   const handleUseItem = async (userItemId: number) => {
@@ -98,19 +130,31 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
               )}
               <div>
                 <h2 className="font-serif text-3xl text-red-50 font-medium tracking-wide">{user.nickname || user.fullname || user.username}</h2>
-                <div className="text-amber-500/80 font-serif italic text-sm mt-1">Ученик академии ({user.username})</div>
+                <div className="text-amber-500/80 font-serif italic text-sm mt-1">
+                  {user.role === 'admin' ? `Архимаг (${user.username})` : `Ученик академии (${user.username})`}
+                </div>
               </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
           {/* Inventory */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden">
-            <div className="bg-zinc-950 p-3 border-b border-zinc-800">
-              <h3 className="font-serif text-lg text-amber-500/90 font-medium">Инвентарь</h3>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden max-h-[400px]">
+            <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex justify-between items-center gap-2">
+              <h3 className="font-serif text-lg text-amber-500/90 font-medium whitespace-nowrap">Инвентарь</h3>
+              <div className="relative w-1/2 max-w-[150px]">
+                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="text" 
+                  placeholder="Поиск..." 
+                  value={itemSearch}
+                  onChange={e => setItemSearch(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1 pl-7 pr-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50"
+                />
+              </div>
             </div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {studentItems.map(ui => ui.item && (
+              {filteredItems.map(ui => ui.item && (
                 <Tooltip 
                   key={ui.id} 
                   align="right"
@@ -118,26 +162,70 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
                 >
                   <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
                     {ui.item.iconUrl ? (
-                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800" />
+                      <img src={ui.item.iconUrl} alt="" className="w-10 h-10 object-cover rounded-sm border border-zinc-800 flex-shrink-0" />
                     ) : (
-                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs">?</div>
+                      <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
                     )}
-                    <div className="flex-1 font-medium text-red-100">{ui.item.name}</div>
+                    <div className="flex-1 font-medium text-red-100 truncate">{ui.item.name}</div>
                     <Button onClick={() => handleUseItem(ui.id)} variant="secondary" className="opacity-0 group-hover:opacity-100 transition-opacity">Использовать</Button>
                   </div>
                 </Tooltip>
               ))}
-              {studentItems.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Рюкзак пуст</div>}
+              {filteredItems.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">{studentItems.length === 0 ? 'Рюкзак пуст' : 'Ничего не найдено'}</div>}
             </div>
           </div>
 
           {/* Abilities */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden">
-            <div className="bg-zinc-950 p-3 border-b border-zinc-800">
-              <h3 className="font-serif text-lg text-amber-500/90 font-medium">Книга заклинаний</h3>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-sm flex flex-col overflow-hidden max-h-[400px]">
+            <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex justify-between items-center gap-2">
+              <h3 className="font-serif text-lg text-amber-500/90 font-medium whitespace-nowrap">Книга заклинаний</h3>
+              <div className="flex gap-2 flex-1 justify-end max-w-[260px]">
+                <div className="relative w-full max-w-[130px]">
+                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Поиск..." 
+                    value={abilitySearch}
+                    onChange={e => setAbilitySearch(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-sm py-1 pl-7 pr-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                    className={`h-[26px] px-2 flex items-center justify-center rounded-sm border transition-colors ${abilityFilters.length > 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500'}`}
+                  >
+                    <Filter size={14} />
+                  </button>
+                  
+                  {isFilterOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsFilterOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-zinc-950 border border-zinc-800 rounded-sm shadow-xl z-50 py-2 flex flex-col">
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('active')} onChange={() => toggleFilter('active')} className="accent-amber-500" />
+                          Активные
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('passive')} onChange={() => toggleFilter('passive')} className="accent-amber-500" />
+                          Пассивные
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('has_cd')} onChange={() => toggleFilter('has_cd')} className="accent-amber-500" />
+                          С откатом (КД)
+                        </label>
+                        <label className="flex items-center gap-2 px-4 py-1.5 hover:bg-zinc-900 cursor-pointer text-xs text-zinc-300 transition-colors">
+                          <input type="checkbox" checked={abilityFilters.includes('has_chance')} onChange={() => toggleFilter('has_chance')} className="accent-amber-500" />
+                          С шансом
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex-1 p-4 overflow-y-auto space-y-3">
-              {studentAbilities.map(ua => ua.ability && (
+              {filteredAbilities.map(ua => ua.ability && (
                 <AbilityCard 
                   key={ua.id} 
                   ua={ua as any} 
@@ -145,7 +233,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
                   onUse={() => handleUseAbility(ua.id, ua.abilityId)} 
                 />
               ))}
-              {studentAbilities.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">Нет изученных навыков</div>}
+              {filteredAbilities.length === 0 && <div className="text-zinc-600 text-sm text-center py-4">{studentAbilities.length === 0 ? 'Нет изученных навыков' : 'Ничего не найдено'}</div>}
             </div>
           </div>
         </div>
@@ -226,6 +314,9 @@ function AbilityCard({ ua, ability, onUse }: { ua: any, ability: any, onUse: () 
         <>
           {ability.description}
           {ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ability.cooldown} сек.</div>}
+          {ability.successChance !== undefined && ability.successChance < 100 && (
+            <div className="text-amber-400/80 mt-1">Шанс успеха: {ability.successChance}%</div>
+          )}
         </>
       }
     >
