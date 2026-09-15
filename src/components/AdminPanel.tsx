@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
@@ -340,50 +340,7 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
             </div>
             <div className="space-y-2 overflow-y-auto pr-1 flex-1">
               {filteredAbilities.map(ua => ua.ability && (
-                <Tooltip
-                  key={ua.id}
-                  align="left"
-                  content={
-                    <>
-                      {ua.ability.description}
-                      {ua.ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ua.ability.cooldown} сек.</div>}
-                      {ua.ability.successChance !== undefined && ua.ability.successChance < 100 && (
-                        <div className="text-amber-400/80 mt-1">Шанс успеха: {ua.ability.successChance}%</div>
-                      )}
-                    </>
-                  }
-                >
-                  <div className="relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 hover:border-zinc-600 transition-colors cursor-pointer">
-                    
-                    <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-900 flex items-center justify-center">
-                      {ua.ability.iconUrl ? (
-                        <img src={ua.ability.iconUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-zinc-700 font-mono text-xs">?</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-amber-200/90 truncate">{ua.ability.name}</div>
-                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">
-                        {ua.ability.type === 'active' ? 'Активная' : 'Пассивная'}
-                      </div>
-                    </div>
-                    
-                    <button 
-                      onClick={async () => {
-                        await fetch('/api/admin/remove-ability', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ userAbilityId: ua.id })
-                        });
-                      }}
-                      className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
-                      title="Забыть способность"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </Tooltip>
+                <AdminAbilityCard key={ua.id} ua={ua} ability={ua.ability} />
               ))}
               {studentAbilities.length === 0 && <div className="text-zinc-600 text-sm">Нет способностей</div>}
             </div>
@@ -777,5 +734,92 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
       {editingItem && <CreateItemModal isOpen={true} onClose={() => setEditingItem(null)} initialData={editingItem} />}
       {editingAbility && <CreateAbilityModal isOpen={true} onClose={() => setEditingAbility(null)} initialData={editingAbility} />}
     </Modal>
+  );
+}
+
+function AdminAbilityCard({ ua, ability }: { ua: any, ability: any }) {
+  const [cdLeft, setCdLeft] = useState(0);
+
+  useEffect(() => {
+    if (ability.type !== 'active') return;
+
+    const updateTimer = () => {
+      const cooldownMs = ability.cooldown * 1000;
+      const passed = Date.now() - ua.lastUsedAt;
+      if (passed < cooldownMs) {
+        setCdLeft(Math.ceil((cooldownMs - passed) / 1000));
+      } else {
+        setCdLeft(0);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [ua.lastUsedAt, ability.cooldown, ability.type]);
+
+  const isReady = cdLeft === 0;
+
+  return (
+    <Tooltip
+      align="left"
+      content={
+        <>
+          {ability.description}
+          {ability.type === 'active' && <div className="mt-1 text-red-400/80">КД: {ability.cooldown} сек.</div>}
+          {ability.successChance !== undefined && ability.successChance < 100 && (
+            <div className="text-amber-400/80 mt-1">Шанс успеха: {ability.successChance}%</div>
+          )}
+        </>
+      }
+    >
+      <div className={`relative group p-2 bg-zinc-950/50 border border-zinc-800 rounded-sm flex items-center gap-3 transition-colors ${!isReady ? 'grayscale opacity-75' : 'hover:border-zinc-600 cursor-pointer'}`}>
+        
+        <div className="relative w-12 h-12 flex-shrink-0 border border-zinc-800 rounded-sm overflow-hidden bg-zinc-900 flex items-center justify-center">
+          {ability.iconUrl ? (
+            <img src={ability.iconUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-zinc-700 font-mono text-xs">?</span>
+          )}
+          
+          {/* Cooldown Overlay */}
+          {!isReady && ability.type === 'active' && (
+            <div 
+              className="absolute bottom-0 left-0 w-full bg-red-950/80 transition-all duration-1000 ease-linear flex flex-col justify-start" 
+              style={{ height: `${(cdLeft / ability.cooldown) * 100}%` }}
+            >
+            </div>
+          )}
+          
+          {/* Cooldown Number */}
+          {!isReady && ability.type === 'active' && (
+            <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs z-20 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">
+              {cdLeft}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-amber-200/90 truncate">{ability.name}</div>
+          <div className="text-[10px] uppercase tracking-widest text-zinc-500">
+            {ability.type === 'active' ? 'Активная' : 'Пассивная'}
+          </div>
+        </div>
+        
+        <button 
+          onClick={async () => {
+            await fetch('/api/admin/remove-ability', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userAbilityId: ua.id })
+            });
+          }}
+          className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
+          title="Забыть способность"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </Tooltip>
   );
 }
