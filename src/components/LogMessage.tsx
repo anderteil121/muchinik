@@ -57,26 +57,30 @@ export function LogMessage({ message, state }: { message: string, state: GameSta
           }
 
           // Проверка: Игрок
-          const user = state.users.find(u => 
-            (u.nickname === innerText || u.fullname === innerText || u.username === innerText) || 
-            (innerText === 'Архимаг' && u.role === 'admin')
+          let user = state.users.find(u => 
+            (u.nickname === innerText || u.fullname === innerText || u.username === innerText)
           );
+
+          if (!user && innerText === 'Архимаг') {
+            user = state.users.find(u => u.role === 'admin' && u.username !== 'admin1') || state.users.find(u => u.role === 'admin');
+          }
+
           if (user) {
             const roleName = user.role === 'admin' ? 'Архимаг' : 'Ученик';
-            const fullName = user.fullname || user.username;
+            const displayName = user.nickname || user.fullname || user.username;
             return (
               <Tooltip key={i} align="left" content={
                 <div className="flex gap-3 max-w-[250px] items-center">
                   {user.photoUrl ? (
-                    <img src={user.photoUrl} alt={fullName} className="w-10 h-10 object-cover rounded-full border border-zinc-700 flex-shrink-0" />
+                    <img src={user.photoUrl} alt={displayName} className="w-10 h-10 object-cover rounded-full border border-zinc-700 flex-shrink-0" />
                   ) : (
                     <div className="w-10 h-10 bg-zinc-900 border border-zinc-700 rounded-full flex items-center justify-center flex-shrink-0 text-zinc-500">
                       <UserCircle size={24} />
                     </div>
                   )}
                   <div className="flex flex-col">
-                    <div className="font-bold text-amber-50/90 leading-tight">{fullName}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-zinc-500">{roleName}</div>
+                    <div className="font-bold text-amber-50/90 leading-tight">{displayName}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500">{roleName} ({user.username})</div>
                   </div>
                 </div>
               }>
