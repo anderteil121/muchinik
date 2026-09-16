@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2 } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw } from 'lucide-react';
 import { LogMessage } from './LogMessage';
+import { ActiveEffects } from './ActiveEffects';
 
 interface AdminPanelProps {
   state: GameState;
@@ -244,6 +245,7 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
           <div>
             <h2 className="font-serif text-2xl text-red-50 font-medium">{displayName}</h2>
             <div className="text-zinc-500 text-sm">{student.role === 'admin' ? 'Архимаг' : 'Ученик'} ({student.username})</div>
+            <ActiveEffects userId={student.id} state={state} />
           </div>
         </div>
         <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">Закрыть</button>
@@ -313,7 +315,27 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
                     ) : (
                       <div className="w-10 h-10 bg-zinc-900 rounded-sm border border-zinc-800 flex items-center justify-center text-zinc-700 font-mono text-xs flex-shrink-0">?</div>
                     )}
-                    <div className="flex-1 font-medium text-red-100 truncate">{ui.item.name}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-red-100 truncate">{ui.item.name}</div>
+                      {ui.item.isStackable && (
+                        <div className="text-[10px] uppercase tracking-widest text-amber-500/80">Стакается</div>
+                      )}
+                    </div>
+                    
+                    <button 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        await fetch('/api/admin/remove-item', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userItemId: ui.id })
+                        });
+                      }}
+                      className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-zinc-900 p-1.5 rounded-sm border border-zinc-800 flex-shrink-0"
+                      title="Забрать предмет"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </Tooltip>
               ))}
@@ -392,12 +414,18 @@ function CreateItemModal({ isOpen, onClose, initialData }: { isOpen: boolean, on
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [iconUrl, setIconUrl] = useState('');
+  const [isStackable, setIsStackable] = useState(false);
+  const [target, setTarget] = useState('self');
+  const [duration, setDuration] = useState('0');
 
   React.useEffect(() => {
     if (isOpen) {
       setName(initialData?.name || '');
       setDesc(initialData?.description || '');
       setIconUrl(initialData?.iconUrl || '');
+      setIsStackable(initialData?.isStackable === 1 || initialData?.isStackable === true);
+      setTarget(initialData?.target || 'self');
+      setDuration(initialData?.duration !== undefined ? String(initialData.duration) : '0');
     }
   }, [isOpen, initialData]);
 
@@ -416,9 +444,9 @@ function CreateItemModal({ isOpen, onClose, initialData }: { isOpen: boolean, on
     await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: initialData?.id, name, description: desc, iconUrl })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, iconUrl, isStackable, target, duration: Number(duration) })
     });
-    if (!initialData) { setName(''); setDesc(''); setIconUrl(''); }
+    if (!initialData) { setName(''); setDesc(''); setIconUrl(''); setIsStackable(false); setTarget('self'); setDuration('0'); }
     onClose();
   };
 
@@ -441,6 +469,27 @@ function CreateItemModal({ isOpen, onClose, initialData }: { isOpen: boolean, on
           </div>
         </div>
         <Input placeholder="Описание" value={desc} onChange={e => setDesc(e.target.value)} />
+        
+        <Select value={target} onChange={e => setTarget(e.target.value)}>
+          <option value="self">На себя</option>
+          <option value="ally">На союзника</option>
+        </Select>
+
+        <div>
+          <label className="text-xs text-zinc-500 mb-1 block">Длительность эффекта на цели (секунд, 0 = без эффекта)</label>
+          <Input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)} />
+        </div>
+        
+        <label className="flex items-center gap-2 text-zinc-300 text-sm cursor-pointer">
+          <input 
+            type="checkbox" 
+            checked={isStackable} 
+            onChange={e => setIsStackable(e.target.checked)}
+            className="accent-amber-500 rounded-sm bg-zinc-900 border-zinc-700 w-4 h-4"
+          />
+          Может стакаться (накапливаться)
+        </label>
+
         <Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
       </div>
     </Modal>
@@ -455,6 +504,8 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
   const [target, setTarget] = useState('self');
   const [cooldown, setCooldown] = useState('10');
   const [successChance, setSuccessChance] = useState('100');
+  const [duration, setDuration] = useState('0');
+  const [isStackable, setIsStackable] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -465,6 +516,10 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
       setTarget(initialData?.target || 'self');
       setCooldown(initialData?.cooldown ? String(initialData.cooldown) : '10');
       setSuccessChance(initialData?.successChance !== undefined ? String(initialData.successChance) : '100');
+      setDuration(initialData?.duration !== undefined ? String(initialData.duration) : '0');
+      setIsStackable(initialData?.isStackable === 1 || initialData?.isStackable === true);
+      setTarget(initialData?.target || 'self');
+      setDuration(initialData?.duration !== undefined ? String(initialData.duration) : '0');
     }
   }, [isOpen, initialData]);
 
@@ -483,9 +538,9 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
     await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl, successChance: Number(successChance) })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl, successChance: Number(successChance), duration: Number(duration), isStackable })
     });
-    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); setSuccessChance('100'); }
+    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); setSuccessChance('100'); setDuration('0'); setIsStackable(false); }
     onClose();
   };
 
@@ -533,7 +588,7 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
           <Input type="number" min="1" max="100" value={successChance} onChange={e => setSuccessChance(e.target.value)} />
         </div>
 
-        <Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
+        <div><label className="text-xs text-zinc-500 mb-1 block">Длительность эффекта на цели (секунд, 0 = без эффекта)</label><Input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)} /></div><label className="flex items-center gap-2 text-zinc-300 text-sm cursor-pointer"><input type="checkbox" checked={isStackable} onChange={e => setIsStackable(e.target.checked)} className="accent-amber-500 rounded-sm bg-zinc-900 border-zinc-700 w-4 h-4" />Может стакаться (накапливаться)</label><Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
       </div>
     </Modal>
   );
@@ -833,6 +888,34 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
     );
   };
 
+  const handleDeleteItem = async (id: number) => {
+    if (confirm('Удалить этот предмет? Это удалит его у всех пользователей.')) {
+      try {
+        await fetch('/api/admin/delete-item', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handleDeleteAbility = async (id: number) => {
+    if (confirm('Удалить эту способность? Это удалит ее у всех пользователей.')) {
+      try {
+        await fetch('/api/admin/delete-ability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   const filteredItems = state.items.filter(i => i.name.toLowerCase().includes(itemSearch.toLowerCase()));
   const filteredAbilities = state.abilities.filter(ability => {
     if (!ability.name.toLowerCase().includes(abilitySearch.toLowerCase())) return false;
@@ -880,13 +963,22 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                     <span className="cursor-help inline-block">{item.name}</span>
                   </Tooltip>
                 </div>
-                <button 
-                  onClick={() => setEditingItem(item)}
-                  className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
-                  title="Изменить"
-                >
-                  <Pencil size={14} />
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setEditingItem(item)}
+                    className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                    title="Изменить"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                    title="Удалить"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
             {filteredItems.length === 0 && <div className="text-zinc-600 text-sm">Ничего не найдено</div>}
@@ -970,13 +1062,22 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                     {ability.type === 'active' ? 'Активная' : 'Пассивная'}
                   </div>
                 </div>
-                <button 
-                  onClick={() => setEditingAbility(ability)}
-                  className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
-                  title="Изменить"
-                >
-                  <Pencil size={14} />
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setEditingAbility(ability)}
+                    className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                    title="Изменить"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteAbility(ability.id)}
+                    className="text-zinc-500 hover:text-red-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
+                    title="Удалить"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
             {filteredAbilities.length === 0 && <div className="text-zinc-600 text-sm">Ничего не найдено</div>}
@@ -1059,19 +1160,36 @@ function AdminAbilityCard({ ua, ability }: { ua: any, ability: any }) {
           </div>
         </div>
         
-        <button 
-          onClick={async () => {
-            await fetch('/api/admin/remove-ability', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userAbilityId: ua.id })
-            });
-          }}
-          className="text-zinc-600 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
-          title="Забыть способность"
-        >
-          <X size={14} />
-        </button>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {!isReady && (
+            <button 
+              onClick={async () => {
+                await fetch('/api/admin/reset-cooldown', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userAbilityId: ua.id })
+                });
+              }}
+              className="text-zinc-600 hover:text-green-500 transition-colors bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
+              title="Сбросить КД"
+            >
+              <RotateCcw size={14} />
+            </button>
+          )}
+          <button 
+            onClick={async () => {
+              await fetch('/api/admin/remove-ability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userAbilityId: ua.id })
+              });
+            }}
+            className="text-zinc-600 hover:text-red-500 transition-colors bg-zinc-900 p-1.5 rounded-sm border border-zinc-800"
+            title="Забыть способность"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
     </Tooltip>
   );

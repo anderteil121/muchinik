@@ -4,6 +4,7 @@ import { Button, Modal, Select, Tooltip, Input } from './ui';
 import { format } from 'date-fns';
 import { UserCircle, Clock, Search, Filter } from 'lucide-react';
 import { LogMessage } from './LogMessage';
+import { ActiveEffects } from './ActiveEffects';
 
 interface StudentPanelProps {
   state: GameState;
@@ -11,7 +12,7 @@ interface StudentPanelProps {
 }
 
 export function StudentPanel({ state, user }: StudentPanelProps) {
-  const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId: number, userAbilityId: number } | null>(null);
+  const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId?: number, userAbilityId?: number, itemId?: number, userItemId?: number, isItem?: boolean } | null>(null);
   const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number } | null>(null);
   const [itemSearch, setItemSearch] = useState('');
   const [abilitySearch, setAbilitySearch] = useState('');
@@ -56,11 +57,19 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
     return matches;
   });
 
-  const handleUseItem = async (userItemId: number) => {
+  const handleUseItem = async (userItemId: number, itemId: number, targetId?: number) => {
+    const item = state.items.find(i => i.id === itemId);
+    if (!item) return;
+    
+    if (item.target === 'ally' && !targetId) {
+      setTargetModalOpen({ itemId, userItemId, isItem: true });
+      return;
+    }
+    
     await fetch('/api/action/use-item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, userItemId })
+      body: JSON.stringify({ userId: user.id, userItemId, targetId })
     });
   };
 
@@ -133,6 +142,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
                 <div className="text-amber-500/80 font-serif italic text-sm mt-1">
                   {user.role === 'admin' ? `Архимаг (${user.username})` : `Ученик академии (${user.username})`}
                 </div>
+                <ActiveEffects userId={user.id} state={state} />
               </div>
           </div>
         </div>
@@ -270,7 +280,12 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
         onlineUserIds={state.onlineUserIds || []}
         onSelect={(targetId) => {
           if (targetModalOpen) {
-            handleUseAbility(targetModalOpen.userAbilityId, targetModalOpen.abilityId, targetId);
+            if (targetModalOpen.isItem) {
+              handleUseItem(targetModalOpen.userItemId!, targetModalOpen.itemId!, targetId);
+              setTargetModalOpen(null);
+            } else {
+              handleUseAbility(targetModalOpen.userAbilityId!, targetModalOpen.abilityId!, targetId);
+            }
           }
         }}
       />

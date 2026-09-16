@@ -64,8 +64,27 @@ async function initDB() {
 
   // Migrate existing tables
   try { await db.execute('ALTER TABLE items ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE items ADD COLUMN isStackable INTEGER DEFAULT 0;'); } catch (e) { /* Ignore if exists */ }
   try { await db.execute('ALTER TABLE abilities ADD COLUMN successChance INTEGER DEFAULT 100;'); } catch (e) { /* Ignore if exists */ }
   try { await db.execute('ALTER TABLE abilities ADD COLUMN iconUrl TEXT;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE abilities ADD COLUMN duration INTEGER DEFAULT 0;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE abilities ADD COLUMN isStackable INTEGER DEFAULT 0;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE items ADD COLUMN target TEXT DEFAULT "self";'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE items ADD COLUMN duration INTEGER DEFAULT 0;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE user_effects ADD COLUMN itemId INTEGER;'); } catch (e) { /* Ignore if exists */ }
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_effects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
+      abilityId INTEGER,
+      appliedAt INTEGER,
+      expiresAt INTEGER,
+      stacks INTEGER DEFAULT 1
+    );
+  `);
+  
+  try { await db.execute('ALTER TABLE user_effects ADD COLUMN stacks INTEGER DEFAULT 1;'); } catch (e) { /* Ignore if exists */ }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS user_items (
@@ -263,10 +282,13 @@ app.get('/api/state', async (req, res) => {
     const abilities = (await db.execute('SELECT * FROM abilities')).rows;
     const userItems = (await db.execute('SELECT * FROM user_items')).rows;
     const userAbilities = (await db.execute('SELECT * FROM user_abilities')).rows;
+    // Clean up expired effects
+    await db.execute({ sql: 'DELETE FROM user_effects WHERE expiresAt < ?', args: [Date.now()] });
+    const userEffects = (await db.execute('SELECT * FROM user_effects')).rows;
     const logs = (await db.execute('SELECT * FROM logs ORDER BY createdAt DESC LIMIT 200')).rows;
     const onlineUserIds = Array.from(onlineUsers.keys());
 
-    res.json({ users, items, abilities, userItems, userAbilities, logs, onlineUserIds });
+    res.json({ users, items, abilities, userItems, userAbilities, userEffects, logs, onlineUserIds });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch state' });
@@ -330,17 +352,18 @@ app.post('/api/admin/bulk-import', async (req, res) => {
         const aTarget = entry.target === 'ally' || entry['on an ally'] === true ? 'ally' : 'self';
         const aCooldown = entry.cooldown || 0;
         const aChance = entry.successChance !== undefined ? entry.successChance : 100;
+        const aDuration = entry.duration || 0;
 
         if (abQuery.rows.length > 0) {
           abId = abQuery.rows[0].id;
           await db.execute({
-            sql: 'UPDATE abilities SET description = ?, type = ?, target = ?, cooldown = ?, successChance = ? WHERE id = ?',
-            args: [entry.description || '', aType, aTarget, aCooldown, aChance, abId]
+            sql: 'UPDATE abilities SET description = ?, type = ?, target = ?, cooldown = ?, successChance = ?, duration = ? WHERE id = ?',
+            args: [entry.description || '', aType, aTarget, aCooldown, aChance, aDuration, abId]
           });
         } else {
           const insertAb = await db.execute({
-            sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl, successChance) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            args: [entry.name, entry.description || '', aType, aTarget, aCooldown, iconUrl, aChance]
+            sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl, successChance, duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [entry.name, entry.description || '', aType, aTarget, aCooldown, iconUrl, aChance, aDuration]
           });
           abId = Number(insertAb.lastInsertRowid);
         }
@@ -370,40 +393,56 @@ app.post('/api/admin/bulk-import', async (req, res) => {
 });
 
 app.post('/api/admin/edit-item', async (req, res) => {
-  const { id, name, description, iconUrl } = req.body;
+  const { id, name, description, iconUrl, isStackable, target, duration } = req.body;
   await db.execute({
-    sql: 'UPDATE items SET name = ?, description = ?, iconUrl = ? WHERE id = ?',
-    args: [name, description, iconUrl || null, id]
+    sql: 'UPDATE items SET name = ?, description = ?, iconUrl = ?, isStackable = ?, target = ?, duration = ? WHERE id = ?',
+    args: [name, description, iconUrl || null, isStackable ? 1 : 0, target || 'self', duration ? Number(duration) : 0, id]
   });
   io.emit('state_updated');
   res.json({ success: true });
 });
 
 app.post('/api/admin/edit-ability', async (req, res) => {
-  const { id, name, description, type, target, cooldown, iconUrl, successChance } = req.body;
+  const { id, name, description, type, target, cooldown, iconUrl, successChance, duration, isStackable } = req.body;
   await db.execute({
-    sql: 'UPDATE abilities SET name = ?, description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ?, successChance = ? WHERE id = ?',
-    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100, id]
+    sql: 'UPDATE abilities SET name = ?, description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ?, successChance = ?, duration = ?, isStackable = ? WHERE id = ?',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100, duration || 0, isStackable ? 1 : 0, id]
   });
   io.emit('state_updated');
   res.json({ success: true });
 });
 
+app.post('/api/admin/delete-item', async (req, res) => {
+  const { id } = req.body;
+  await db.execute({ sql: 'DELETE FROM user_items WHERE itemId = ?', args: [id] });
+  await db.execute({ sql: 'DELETE FROM items WHERE id = ?', args: [id] });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
+app.post('/api/admin/delete-ability', async (req, res) => {
+  const { id } = req.body;
+  await db.execute({ sql: 'DELETE FROM user_abilities WHERE abilityId = ?', args: [id] });
+  await db.execute({ sql: 'DELETE FROM abilities WHERE id = ?', args: [id] });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
 app.post('/api/admin/create-item', async (req, res) => {
-  const { name, description, iconUrl } = req.body;
+  const { name, description, iconUrl, isStackable, target, duration } = req.body;
   await db.execute({
-    sql: 'INSERT INTO items (name, description, iconUrl) VALUES (?, ?, ?)',
-    args: [name, description, iconUrl || null]
+    sql: 'INSERT INTO items (name, description, iconUrl, isStackable, target, duration) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [name, description, iconUrl || null, isStackable ? 1 : 0, target || 'self', duration ? Number(duration) : 0]
   });
   io.emit('state_updated');
   res.json({ success: true });
 });
 
 app.post('/api/admin/create-ability', async (req, res) => {
-  const { name, description, type, target, cooldown, iconUrl, successChance } = req.body;
+  const { name, description, type, target, cooldown, iconUrl, successChance, duration, isStackable } = req.body;
   await db.execute({
-    sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl, successChance) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100]
+    sql: 'INSERT INTO abilities (name, description, type, target, cooldown, iconUrl, successChance, duration, isStackable) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    args: [name, description, type, target, cooldown || 0, iconUrl || null, successChance !== undefined ? successChance : 100, duration || 0, isStackable ? 1 : 0]
   });
   io.emit('state_updated');
   res.json({ success: true });
@@ -448,6 +487,26 @@ app.post('/api/admin/remove-ability', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/admin/remove-item', async (req, res) => {
+  const { userItemId } = req.body;
+  await db.execute({
+    sql: 'DELETE FROM user_items WHERE id = ?',
+    args: [userItemId]
+  });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
+app.post('/api/admin/reset-cooldown', async (req, res) => {
+  const { userAbilityId } = req.body;
+  await db.execute({
+    sql: 'UPDATE user_abilities SET lastUsedAt = 0 WHERE id = ?',
+    args: [userAbilityId]
+  });
+  io.emit('state_updated');
+  res.json({ success: true });
+});
+
 app.post('/api/admin/update-photo', async (req, res) => {
   const { userId, photoUrl } = req.body;
   await db.execute({
@@ -476,7 +535,7 @@ app.post('/api/admin/clear-logs', async (req, res) => {
 
 // Student Actions
 app.post('/api/action/use-item', async (req, res) => {
-  const { userId, userItemId } = req.body;
+  const { userId, userItemId, targetId } = req.body;
   
   const userQuery = await db.execute({ sql: 'SELECT role, username, fullname, nickname FROM users WHERE id = ?', args: [userId] });
   if (userQuery.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -485,30 +544,75 @@ app.post('/api/action/use-item', async (req, res) => {
   const isAdmin = user.role === 'admin';
   const username = isAdmin ? `Архимаг:${user.id}` : (user.nickname || user.fullname || user.username);
   
-  let itemName;
+  let itemInfo;
+  let actualItemId;
   
   if (isAdmin && String(userItemId).startsWith('admin_item_')) {
     const itemId = String(userItemId).replace('admin_item_', '');
-    const item = await db.execute({ sql: 'SELECT name FROM items WHERE id = ?', args: [itemId] });
-    if (item.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    itemName = item.rows[0].name;
-    // Don't delete from user_items since it's an admin pseudo-item
+    actualItemId = itemId;
+    const itemQuery = await db.execute({ sql: 'SELECT name, target, duration, isStackable FROM items WHERE id = ?', args: [itemId] });
+    if (itemQuery.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    itemInfo = itemQuery.rows[0];
   } else {
-    // Normal logic
     const ui = await db.execute({
       sql: 'SELECT itemId FROM user_items WHERE id = ?',
       args: [userItemId]
     });
     if (ui.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     
-    const itemId = ui.rows[0].itemId;
-    const item = await db.execute({ sql: 'SELECT name FROM items WHERE id = ?', args: [itemId] });
-    itemName = item.rows[0].name;
+    actualItemId = ui.rows[0].itemId;
+    const itemQuery = await db.execute({ sql: 'SELECT name, target, duration, isStackable FROM items WHERE id = ?', args: [actualItemId] });
+    itemInfo = itemQuery.rows[0];
     
     await db.execute({ sql: 'DELETE FROM user_items WHERE id = ?', args: [userItemId] });
   }
 
-  await logAction(`[${username}] использовал предмет: [${itemName}]`);
+  let effectTargetId = null;
+  if (itemInfo.target === 'ally' && targetId) {
+    effectTargetId = targetId;
+  } else {
+    effectTargetId = userId;
+  }
+  
+  if (itemInfo.duration && itemInfo.duration > 0 && effectTargetId) {
+    const appliedAt = Date.now();
+    const expiresAt = appliedAt + (itemInfo.duration * 1000);
+    
+    if (itemInfo.isStackable) {
+      const existing = await db.execute({
+        sql: 'SELECT id, stacks FROM user_effects WHERE userId = ? AND itemId = ?',
+        args: [effectTargetId, actualItemId]
+      });
+      if (existing.rows.length > 0) {
+        await db.execute({
+          sql: 'UPDATE user_effects SET stacks = stacks + 1, expiresAt = ? WHERE id = ?',
+          args: [expiresAt, existing.rows[0].id]
+        });
+      } else {
+        await db.execute({
+          sql: 'INSERT INTO user_effects (userId, itemId, appliedAt, expiresAt, stacks) VALUES (?, ?, ?, ?, 1)',
+          args: [effectTargetId, actualItemId, appliedAt, expiresAt]
+        });
+      }
+    } else {
+      await db.execute({
+        sql: 'INSERT INTO user_effects (userId, itemId, appliedAt, expiresAt, stacks) VALUES (?, ?, ?, ?, 1)',
+        args: [effectTargetId, actualItemId, appliedAt, expiresAt]
+      });
+    }
+  }
+
+  let logMsg = `[${username}] использовал предмет: [${itemInfo.name}]`;
+  if (itemInfo.target === 'ally' && targetId && targetId !== userId) {
+    const targetUser = await db.execute({ sql: 'SELECT username, fullname, nickname FROM users WHERE id = ?', args: [targetId] });
+    if (targetUser.rows.length > 0) {
+      const tu = targetUser.rows[0];
+      const targetName = tu.nickname || tu.fullname || tu.username;
+      logMsg = `[${username}] использовал предмет: [${itemInfo.name}] на [${targetName}]`;
+    }
+  }
+  await logAction(logMsg);
+  
   io.emit('state_updated');
   res.json({ success: true });
 });
@@ -539,7 +643,7 @@ app.post('/api/action/use-ability', async (req, res) => {
     lastUsedAt = ua.rows[0].lastUsedAt;
   }
 
-  const abilityInfo = await db.execute({ sql: 'SELECT name, target, cooldown, type FROM abilities WHERE id = ?', args: [abilityId] });
+  const abilityInfo = await db.execute({ sql: 'SELECT name, target, cooldown, type, duration, isStackable FROM abilities WHERE id = ?', args: [abilityId] });
   const ability = abilityInfo.rows[0];
   
   if (!isAdmin && ability.type === 'active') {
@@ -558,7 +662,10 @@ app.post('/api/action/use-ability', async (req, res) => {
   const isFail = outcome === 'fail';
   const typeText = ability.type === 'passive' ? 'пассивную способность' : 'способность';
   
+  let effectTargetId = null;
+
   if (ability.target === 'ally' && targetId) {
+    effectTargetId = targetId;
     const targetInfo = await db.execute({ sql: 'SELECT username, fullname, nickname FROM users WHERE id = ?', args: [targetId] });
     const targetName = targetInfo.rows.length > 0 ? (targetInfo.rows[0].nickname || targetInfo.rows[0].fullname || targetInfo.rows[0].username) : 'Неизвестная цель';
     if (isFail) {
@@ -567,10 +674,39 @@ app.post('/api/action/use-ability', async (req, res) => {
       await logAction(`[${username}] применил ${typeText} на [${targetName}]: [${ability.name}]`);
     }
   } else {
+    effectTargetId = userId;
     if (isFail) {
       await logAction(`[${username}] попытался использовать ${typeText} [${ability.name}], но потерпел неудачу!`);
     } else {
       await logAction(`[${username}] использовал ${typeText}: [${ability.name}]`);
+    }
+  }
+  
+  if (!isFail && ability.duration && ability.duration > 0 && effectTargetId) {
+    const appliedAt = Date.now();
+    const expiresAt = appliedAt + (ability.duration * 1000);
+    
+    if (ability.isStackable) {
+      const existing = await db.execute({
+        sql: 'SELECT id, stacks FROM user_effects WHERE userId = ? AND abilityId = ?',
+        args: [effectTargetId, abilityId]
+      });
+      if (existing.rows.length > 0) {
+        await db.execute({
+          sql: 'UPDATE user_effects SET stacks = stacks + 1, expiresAt = ? WHERE id = ?',
+          args: [expiresAt, existing.rows[0].id]
+        });
+      } else {
+        await db.execute({
+          sql: 'INSERT INTO user_effects (userId, abilityId, appliedAt, expiresAt, stacks) VALUES (?, ?, ?, ?, 1)',
+          args: [effectTargetId, abilityId, appliedAt, expiresAt]
+        });
+      }
+    } else {
+      await db.execute({
+        sql: 'INSERT INTO user_effects (userId, abilityId, appliedAt, expiresAt, stacks) VALUES (?, ?, ?, ?, 1)',
+        args: [effectTargetId, abilityId, appliedAt, expiresAt]
+      });
     }
   }
   
