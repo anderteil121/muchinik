@@ -305,8 +305,8 @@ app.post('/api/admin/bulk-import', async (req, res) => {
         if (itemQuery.rows.length > 0) {
           itemId = itemQuery.rows[0].id;
           await db.execute({
-            sql: 'UPDATE items SET description = ?, iconUrl = ? WHERE id = ?',
-            args: [entry.description || '', iconUrl, itemId]
+            sql: 'UPDATE items SET description = ? WHERE id = ?',
+            args: [entry.description || '', itemId]
           });
         } else {
           const insertItem = await db.execute({
@@ -334,8 +334,8 @@ app.post('/api/admin/bulk-import', async (req, res) => {
         if (abQuery.rows.length > 0) {
           abId = abQuery.rows[0].id;
           await db.execute({
-            sql: 'UPDATE abilities SET description = ?, type = ?, target = ?, cooldown = ?, iconUrl = ?, successChance = ? WHERE id = ?',
-            args: [entry.description || '', aType, aTarget, aCooldown, iconUrl, aChance, abId]
+            sql: 'UPDATE abilities SET description = ?, type = ?, target = ?, cooldown = ?, successChance = ? WHERE id = ?',
+            args: [entry.description || '', aType, aTarget, aCooldown, aChance, abId]
           });
         } else {
           const insertAb = await db.execute({
