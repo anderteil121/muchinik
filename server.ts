@@ -483,7 +483,7 @@ app.post('/api/action/use-item', async (req, res) => {
   
   const user = userQuery.rows[0];
   const isAdmin = user.role === 'admin';
-  const username = isAdmin ? 'Архимаг' : (user.nickname || user.fullname || user.username);
+  const username = isAdmin ? `Архимаг:${user.id}` : (user.nickname || user.fullname || user.username);
   
   let itemName;
   
@@ -521,7 +521,7 @@ app.post('/api/action/use-ability', async (req, res) => {
   
   const user = userQuery.rows[0];
   const isAdmin = user.role === 'admin';
-  const username = isAdmin ? 'Архимаг' : (user.nickname || user.fullname || user.username);
+  const username = isAdmin ? `Архимаг:${user.id}` : (user.nickname || user.fullname || user.username);
   
   let abilityId;
   let lastUsedAt = 0;

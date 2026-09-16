@@ -10,7 +10,15 @@ export function LogMessage({ message, state }: { message: string, state: GameSta
     <>
       {parts.map((part, i) => {
         if (part.startsWith('[') && part.endsWith(']')) {
-          const innerText = part.slice(1, -1);
+          let innerText = part.slice(1, -1);
+          let displayPart = part;
+          let adminId: number | null = null;
+          
+          if (innerText.startsWith('Архимаг:')) {
+            adminId = parseInt(innerText.split(':')[1], 10);
+            innerText = 'Архимаг';
+            displayPart = '[Архимаг]';
+          }
           
           // Проверка: Навык
           const ability = state.abilities.find(a => a.name === innerText);
@@ -57,12 +65,18 @@ export function LogMessage({ message, state }: { message: string, state: GameSta
           }
 
           // Проверка: Игрок
-          let user = state.users.find(u => 
-            (u.nickname === innerText || u.fullname === innerText || u.username === innerText)
-          );
+          let user = null;
+          
+          if (adminId !== null) {
+            user = state.users.find(u => u.id === adminId);
+          } else {
+            user = state.users.find(u => 
+              (u.nickname === innerText || u.fullname === innerText || u.username === innerText)
+            );
 
-          if (!user && innerText === 'Архимаг') {
-            user = state.users.find(u => u.role === 'admin' && u.username !== 'admin1') || state.users.find(u => u.role === 'admin');
+            if (!user && innerText === 'Архимаг') {
+              user = state.users.find(u => u.role === 'admin' && u.username !== 'admin1') || state.users.find(u => u.role === 'admin');
+            }
           }
 
           if (user) {
@@ -84,13 +98,13 @@ export function LogMessage({ message, state }: { message: string, state: GameSta
                   </div>
                 </div>
               }>
-                <span className="text-zinc-200 font-medium cursor-help hover:underline decoration-zinc-500/50 underline-offset-2">{part}</span>
+                <span className="text-zinc-200 font-medium cursor-help hover:underline decoration-zinc-500/50 underline-offset-2">{displayPart}</span>
               </Tooltip>
             );
           }
 
           // Остальные скобки (имена игроков или неизвестные сущности)
-          return <span key={i} className="text-zinc-200 font-medium">{part}</span>;
+          return <span key={i} className="text-zinc-200 font-medium">{displayPart}</span>;
         }
         
         // Обычный текст
