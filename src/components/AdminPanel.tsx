@@ -506,6 +506,7 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
   const [successChance, setSuccessChance] = useState('100');
   const [duration, setDuration] = useState('0');
   const [isStackable, setIsStackable] = useState(false);
+  const [chances, setChances] = useState<{name: string, chance: number}[]>([]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -518,8 +519,9 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
       setSuccessChance(initialData?.successChance !== undefined ? String(initialData.successChance) : '100');
       setDuration(initialData?.duration !== undefined ? String(initialData.duration) : '0');
       setIsStackable(initialData?.isStackable === 1 || initialData?.isStackable === true);
-      setTarget(initialData?.target || 'self');
-      setDuration(initialData?.duration !== undefined ? String(initialData.duration) : '0');
+      try {
+        setChances(initialData?.chancesJson ? JSON.parse(initialData.chancesJson) : []);
+      } catch(e) { setChances([]); }
     }
   }, [isOpen, initialData]);
 
@@ -538,15 +540,27 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
     await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl, successChance: Number(successChance), duration: Number(duration), isStackable })
+      body: JSON.stringify({ id: initialData?.id, name, description: desc, type, target, cooldown: Number(cooldown), iconUrl, successChance: Number(successChance), duration: Number(duration), isStackable, chancesJson: JSON.stringify(chances) })
     });
-    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); setSuccessChance('100'); setDuration('0'); setIsStackable(false); }
+    if (!initialData) { setName(''); setDesc(''); setCooldown('10'); setIconUrl(''); setSuccessChance('100'); setDuration('0'); setIsStackable(false); setChances([]); }
     onClose();
+  };
+
+  const addChance = () => setChances([...chances, {name: '', chance: 10}]);
+  const updateChance = (i: number, key: 'name'|'chance', val: string|number) => {
+    const newChances = [...chances];
+    newChances[i] = { ...newChances[i], [key]: val };
+    setChances(newChances);
+  };
+  const removeChance = (i: number) => {
+    const newChances = [...chances];
+    newChances.splice(i, 1);
+    setChances(newChances);
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Изменить способность" : "Создать способность"}>
-      <div className="space-y-4">
+      <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
         <Input placeholder="Название способности" value={name} onChange={e => setName(e.target.value)} />
         
         <div className="flex gap-4 items-center">
@@ -584,8 +598,26 @@ function CreateAbilityModal({ isOpen, onClose, initialData }: { isOpen: boolean,
         )}
 
         <div>
-          <label className="text-xs text-zinc-500 mb-1 block">Шанс успеха (%)</label>
+          <label className="text-xs text-zinc-500 mb-1 block">Шанс успеха (%) (одиночный исход)</label>
           <Input type="number" min="1" max="100" value={successChance} onChange={e => setSuccessChance(e.target.value)} />
+        </div>
+
+        <div className="border border-zinc-800 p-3 rounded-sm space-y-3 bg-zinc-950/50">
+          <div className="flex justify-between items-center">
+            <label className="text-xs text-amber-500">Варианты исхода (дополнительно)</label>
+            <Button onClick={addChance} className="text-xs py-1 px-2">Добавить исход</Button>
+          </div>
+          {chances.map((c, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <Input placeholder="Название (напр. x4)" value={c.name} onChange={e => updateChance(i, 'name', e.target.value)} />
+              <div className="w-24">
+                <Input type="number" min="1" max="100" value={c.chance} onChange={e => updateChance(i, 'chance', Number(e.target.value))} />
+              </div>
+              <div className="text-zinc-500 text-sm">%</div>
+              <button onClick={() => removeChance(i)} className="text-red-500 hover:text-red-400 p-1">✕</button>
+            </div>
+          ))}
+          {chances.length > 0 && <p className="text-xs text-zinc-500">Суммарный шанс вариантов: {chances.reduce((a,b)=>a+b.chance,0)}%. Оставшийся шанс — неудача.</p>}
         </div>
 
         <div><label className="text-xs text-zinc-500 mb-1 block">Длительность эффекта на цели (секунд, 0 = без эффекта)</label><Input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)} /></div><label className="flex items-center gap-2 text-zinc-300 text-sm cursor-pointer"><input type="checkbox" checked={isStackable} onChange={e => setIsStackable(e.target.checked)} className="accent-amber-500 rounded-sm bg-zinc-900 border-zinc-700 w-4 h-4" />Может стакаться (накапливаться)</label><Button onClick={submit} className="w-full">{initialData ? 'Сохранить' : 'Создать'}</Button>
@@ -842,6 +874,13 @@ function ImportJsonModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
     "abilityType": "active",
     "target": "ally",
     "cooldown": 10,
+    "successChance": 100, // одиночный шанс, если нет chances (вариантов)
+    "chances": [ // необязательно: варианты исхода, переопределяют successChance
+      {"name": "x4", "chance": 40},
+      {"name": "x3", "chance": 30},
+      {"name": "x2", "chance": 20},
+      {"name": "x1", "chance": 10}
+    ],
     "iconUrl": "https://..." // необязательно: если убрать, сгенерируется картинка с первой буквой
   },
   {

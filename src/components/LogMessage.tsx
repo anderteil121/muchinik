@@ -68,7 +68,7 @@ export function LogMessage({ message, state }: { message: string, state: GameSta
           let user = null;
           
           if (adminId !== null) {
-            user = state.users.find(u => u.id === adminId);
+            user = state.users.find(u => Number(u.id) === adminId);
           } else {
             user = state.users.find(u => 
               (u.nickname === innerText || u.fullname === innerText || u.username === innerText)

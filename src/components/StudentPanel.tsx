@@ -13,7 +13,7 @@ interface StudentPanelProps {
 
 export function StudentPanel({ state, user }: StudentPanelProps) {
   const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId?: number, userAbilityId?: number, itemId?: number, userItemId?: number, isItem?: boolean } | null>(null);
-  const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number } | null>(null);
+  const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number, chancesJson?: string } | null>(null);
   const [itemSearch, setItemSearch] = useState('');
   const [abilitySearch, setAbilitySearch] = useState('');
   const [abilityFilters, setAbilityFilters] = useState<string[]>([]);
@@ -83,15 +83,17 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
     }
 
     const chance = ability.successChance !== undefined ? ability.successChance : 100;
+    const hasVariants = ability.chancesJson && ability.chancesJson !== '[]';
     
-    if (chance < 100) {
+    if (chance < 100 || hasVariants) {
       // Open roulette modal
       setTargetModalOpen(null);
       setRouletteState({
         userAbilityId,
         abilityId,
         targetId,
-        chance
+        chance,
+        chancesJson: ability.chancesJson
       });
       return;
     }
@@ -105,7 +107,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
     setTargetModalOpen(null);
   };
 
-  const handleRouletteFinish = async (outcome: 'success' | 'fail') => {
+  const handleRouletteFinish = async (outcome: string) => {
     if (!rouletteState) return;
     await fetch('/api/action/use-ability', {
       method: 'POST',
@@ -293,6 +295,7 @@ export function StudentPanel({ state, user }: StudentPanelProps) {
       <RouletteModal 
         isOpen={!!rouletteState} 
         chance={rouletteState?.chance || 100}
+        chancesJson={rouletteState?.chancesJson}
         onFinish={handleRouletteFinish}
       />
     </div>
@@ -420,21 +423,57 @@ function TargetSelectionModal({ isOpen, onClose, students, onSelect, onlineUserI
   );
 }
 
-function RouletteModal({ isOpen, chance, onFinish }: { isOpen: boolean, chance: number, onFinish: (outcome: 'success' | 'fail') => void }) {
+function RouletteModal({ isOpen, chance, chancesJson, onFinish }: { isOpen: boolean, chance: number, chancesJson?: string, onFinish: (outcome: string) => void }) {
   const [spinning, setSpinning] = useState(false);
-  const [result, setResult] = useState<'success' | 'fail' | null>(null);
-  const [items, setItems] = useState<string[]>([]);
+  const [result, setResult] = useState<string | null>(null);
+  const [items, setItems] = useState<{name: string, type: 'success' | 'fail' | 'variant'}[]>([]);
   const [spinOffset, setSpinOffset] = useState(0);
   
   useEffect(() => {
     if (isOpen) {
-      const isSuccess = Math.random() * 100 <= chance;
-      const outcome = isSuccess ? 'success' : 'fail';
+      let variants: {name: string, chance: number}[] = [];
+      try {
+        variants = chancesJson ? JSON.parse(chancesJson) : [];
+      } catch(e) {}
+
+      let finalOutcome = 'fail';
+      let outcomeType: 'success' | 'fail' | 'variant' = 'fail';
+
+      if (variants.length > 0) {
+        // Roll between variants
+        const roll = Math.random() * 100;
+        let cumulative = 0;
+        for (const v of variants) {
+          cumulative += v.chance;
+          if (roll <= cumulative) {
+            finalOutcome = v.name;
+            outcomeType = 'variant';
+            break;
+          }
+        }
+      } else {
+        const isSuccess = Math.random() * 100 <= chance;
+        finalOutcome = isSuccess ? 'success' : 'fail';
+        outcomeType = finalOutcome as 'success' | 'fail';
+      }
       
       // Generate 40 random items, and 1 final result item
-      const newItems = Array.from({ length: 40 }).map(() => Math.random() > 0.5 ? 'success' : 'fail');
-      newItems.push(outcome);
-      setItems(newItems);
+      const newItems = Array.from({ length: 40 }).map(() => {
+        if (variants.length > 0) {
+           const randV = variants[Math.floor(Math.random() * variants.length)];
+           return Math.random() > 0.5 ? {name: randV.name, type: 'variant'} : {name: 'Неудача', type: 'fail'};
+        } else {
+           return Math.random() > 0.5 ? {name: 'Успех', type: 'success'} : {name: 'Неудача', type: 'fail'};
+        }
+      });
+
+      if (variants.length > 0) {
+        newItems.push({name: outcomeType === 'fail' ? 'Неудача' : finalOutcome, type: outcomeType});
+      } else {
+        newItems.push({name: finalOutcome === 'success' ? 'Успех' : 'Неудача', type: outcomeType});
+      }
+
+      setItems(newItems as any);
       
       setResult(null);
       setSpinning(true);
@@ -451,10 +490,10 @@ function RouletteModal({ isOpen, chance, onFinish }: { isOpen: boolean, chance: 
       
       const t2 = setTimeout(() => {
         setSpinning(false);
-        setResult(outcome);
+        setResult(finalOutcome);
         
         setTimeout(() => {
-          onFinish(outcome);
+          onFinish(finalOutcome);
         }, 1500);
       }, 3050); // 3 seconds spin + 50ms delay
       
@@ -465,12 +504,14 @@ function RouletteModal({ isOpen, chance, onFinish }: { isOpen: boolean, chance: 
     } else {
       setSpinOffset(0);
     }
-  }, [isOpen, chance]); // Added chance to deps (though it rarely changes while open)
+  }, [isOpen, chance, chancesJson]);
 
   return (
     <Modal isOpen={isOpen} onClose={() => {}} title="Проверка шанса...">
       <div className="flex flex-col items-center justify-center p-6 space-y-8 overflow-hidden">
-        <div className="text-zinc-400 text-sm">Шанс успеха: <span className="text-amber-500 font-medium">{chance}%</span></div>
+        <div className="text-zinc-400 text-sm">
+          Шанс успеха: <span className="text-amber-500 font-medium">{chance}%</span>
+        </div>
         
         <div className="relative w-full h-32 bg-zinc-950 border border-zinc-800 rounded-sm overflow-hidden flex items-center justify-center shadow-inner">
           <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/90 via-transparent to-zinc-950/90 z-10 pointer-events-none" />
@@ -484,14 +525,14 @@ function RouletteModal({ isOpen, chance, onFinish }: { isOpen: boolean, chance: 
               const isFinal = i === items.length - 1;
               const isHighlighted = isFinal && result !== null;
               
-              let colorClass = item === 'success' ? 'text-green-500/40' : 'text-red-500/40';
+              let colorClass = item.type === 'success' || item.type === 'variant' ? 'text-green-500/40' : 'text-red-500/40';
               if (isHighlighted) {
-                colorClass = result === 'success' ? 'text-green-500 font-bold scale-110 transition-transform' : 'text-red-500 font-bold scale-110 transition-transform';
+                colorClass = (item.type === 'success' || item.type === 'variant') ? 'text-green-500 font-bold scale-110 transition-transform' : 'text-red-500 font-bold scale-110 transition-transform';
               }
-
+              
               return (
                 <div key={i} className={`h-10 flex items-center justify-center ${colorClass}`}>
-                  {item === 'success' ? 'УСПЕХ' : 'ПРОВАЛ'}
+                  {item.name}
                 </div>
               );
             })}

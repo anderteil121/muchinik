@@ -26,6 +26,7 @@ export interface Ability {
   successChance?: number;
   duration?: number;
   isStackable?: boolean;
+  chancesJson?: string;
 }
 export interface UserItem {
   id: number;
