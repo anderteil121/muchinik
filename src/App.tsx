@@ -2,15 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useGameState } from './lib/useGameState';
 import { AdminPanel } from './components/AdminPanel';
 import { StudentPanel } from './components/StudentPanel';
+import { MarketplaceModal } from './components/MarketplaceModal';
+import { QuestBoardModal } from './components/QuestBoardModal';
 import { Button, Input } from './components/ui';
 import { socket } from './lib/socket';
 import quotesData from './data/quotes.json';
+import { Store, Coins, ScrollText } from 'lucide-react';
 
 export default function App() {
   const { state, fetchState } = useGameState();
   const [user, setUser] = useState<any>(null);
   const [playMode, setPlayMode] = useState(false);
   const [quote] = useState(() => quotesData.length > 0 ? quotesData[Math.floor(Math.random() * quotesData.length)] : null);
+  const [isMarketOpen, setIsMarketOpen] = useState(false);
+  const [marketInitialItemId, setMarketInitialItemId] = useState<number | null>(null);
+  const [isQuestBoardOpen, setIsQuestBoardOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -165,11 +171,47 @@ export default function App() {
   }
 
   const currentUser = state.users.find(u => u.id === user.id) || user;
+  const userQuests = state.userQuests || [];
+  const quests = state.quests || [];
+  const activeQuestsCount = userQuests.filter(uq => Number(uq.userId) === Number(currentUser.id) && uq.status === 'active').length;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 font-sans flex flex-col relative">
       <header className="bg-zinc-950 border-b border-red-900/30 py-3 px-6 flex justify-between items-center relative z-10 shrink-0">
         <h1 className="font-serif text-2xl text-amber-500/90 tracking-widest font-bold uppercase">Мученики</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Marketplace Button */}
+          <button
+            onClick={() => {
+              setMarketInitialItemId(null);
+              setIsMarketOpen(true);
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-xs font-serif text-amber-400 transition-all shadow-sm group"
+            title="Торговая площадка"
+          >
+            <Store size={15} className="text-amber-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Торговая площадка</span>
+            <span className="bg-amber-950/80 border border-amber-500/50 px-1.5 py-0.5 rounded font-mono text-[11px] text-amber-300 font-bold flex items-center gap-1">
+              <Coins size={11} className="text-amber-400" />
+              {currentUser.balance || 0}
+            </span>
+          </button>
+
+          {/* Quest Board Button */}
+          <button
+            onClick={() => setIsQuestBoardOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-xs font-serif text-amber-400 transition-all shadow-sm group"
+            title="Доска квестов"
+          >
+            <ScrollText size={15} className="text-amber-500 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Доска квестов</span>
+            {activeQuestsCount > 0 && (
+              <span className="bg-amber-500 text-zinc-950 px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold">
+                {activeQuestsCount}
+              </span>
+            )}
+          </button>
+
           {currentUser.role === 'admin' && (
             <Button variant="secondary" onClick={() => setPlayMode(!playMode)} className="text-xs px-3 py-1 border-amber-500/50 text-amber-500 hover:bg-amber-500/10">
               {playMode ? 'Панель Мастера' : 'Игровой режим'}
@@ -194,11 +236,95 @@ export default function App() {
 
       <main className="flex-1 relative z-0">
         {currentUser.role === 'admin' && !playMode ? (
-          <AdminPanel state={state} admin={currentUser} />
+          <AdminPanel 
+            state={state} 
+            admin={currentUser} 
+            onOpenMarket={(itemId) => {
+              setMarketInitialItemId(itemId || null);
+              setIsMarketOpen(true);
+            }}
+            onOpenQuests={() => setIsQuestBoardOpen(true)}
+          />
         ) : (
-          <StudentPanel state={state} user={currentUser} />
+          <StudentPanel 
+            state={state} 
+            user={currentUser} 
+            onOpenMarket={() => {
+              setMarketInitialItemId(null);
+              setIsMarketOpen(true);
+            }}
+            onOpenQuests={() => setIsQuestBoardOpen(true)}
+          />
         )}
       </main>
+
+      {/* Floating launcher buttons in empty space on the left */}
+      <div className="fixed left-4 bottom-6 z-40 flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+        {/* Marketplace */}
+        <button
+          onClick={() => {
+            setMarketInitialItemId(null);
+            setIsMarketOpen(true);
+          }}
+          className="group relative flex items-center gap-2.5 bg-zinc-950/95 hover:bg-zinc-900 border border-amber-500/60 hover:border-amber-400 px-3.5 py-2.5 rounded-full shadow-2xl shadow-black hover:shadow-amber-500/20 transition-all duration-200"
+          title="Открыть Торговую площадку"
+        >
+          <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+            <Store size={18} />
+          </div>
+          <div className="flex flex-col text-left pr-1">
+            <span className="font-serif text-xs font-bold text-amber-400 tracking-wider uppercase">
+              Торговая площадка
+            </span>
+            <span className="text-[11px] font-mono text-amber-300 flex items-center gap-1 font-semibold">
+              <Coins size={11} className="text-amber-400" />
+              {currentUser.balance || 0} монет
+            </span>
+          </div>
+        </button>
+
+        {/* Quest Board ("доска с бумажками") */}
+        <button
+          onClick={() => setIsQuestBoardOpen(true)}
+          className="group relative flex items-center gap-2.5 bg-zinc-950/95 hover:bg-zinc-900 border border-amber-600/60 hover:border-amber-400 px-3.5 py-2.5 rounded-full shadow-2xl shadow-black hover:shadow-amber-500/20 transition-all duration-200"
+          title="Открыть Доску квестов"
+        >
+          <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform relative">
+            <ScrollText size={18} />
+            {activeQuestsCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-zinc-950 text-[10px] font-bold flex items-center justify-center shadow">
+                {activeQuestsCount}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col text-left pr-1">
+            <span className="font-serif text-xs font-bold text-amber-400 tracking-wider uppercase">
+              Доска квестов
+            </span>
+            <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-medium">
+              {currentUser.role === 'admin' ? 'Управление заданиями' : activeQuestsCount > 0 ? `${activeQuestsCount} активных` : 'Доступны задания'}
+            </span>
+          </div>
+        </button>
+      </div>
+
+      <MarketplaceModal
+        isOpen={isMarketOpen}
+        onClose={() => {
+          setIsMarketOpen(false);
+          setMarketInitialItemId(null);
+        }}
+        state={state}
+        currentUser={currentUser}
+        initialListItemId={marketInitialItemId || undefined}
+      />
+
+      <QuestBoardModal
+        isOpen={isQuestBoardOpen}
+        onClose={() => setIsQuestBoardOpen(false)}
+        state={state}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

@@ -51,7 +51,7 @@ export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, o
 
 import { createPortal } from 'react-dom';
 
-export function Tooltip({ content, children, align = 'right' }: { content: React.ReactNode, children: React.ReactElement, align?: 'left' | 'right' }) {
+export function Tooltip({ content, children, align = 'right' }: { content: React.ReactNode, children: React.ReactElement, align?: 'left' | 'right', key?: React.Key }) {
   const [rect, setRect] = React.useState<DOMRect | null>(null);
 
   return (

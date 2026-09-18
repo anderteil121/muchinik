@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw, Store, Coins, ScrollText } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 import { ActiveEffects } from './ActiveEffects';
 
 interface AdminPanelProps {
   state: GameState;
   admin: User;
+  onOpenMarket?: (itemId?: number) => void;
+  onOpenQuests?: () => void;
 }
 
-export function AdminPanel({ state, admin }: AdminPanelProps) {
+export function AdminPanel({ state, admin, onOpenMarket, onOpenQuests }: AdminPanelProps) {
   const students = state.users.filter(u => u.role === 'student');
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [isCreateItemOpen, setIsCreateItemOpen] = useState(false);
@@ -53,8 +55,8 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
           </div>
         </button>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col min-h-[250px] flex-1">
-          <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex flex-col gap-2">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col shrink-0">
+          <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex flex-col gap-2 shrink-0">
             <h2 className="font-serif text-lg text-amber-500/90 font-medium">Ученики ({filteredStudents.length})</h2>
             <div className="flex gap-2 text-xs">
               <button 
@@ -71,16 +73,20 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+          <div className="overflow-y-auto p-2 space-y-1.5 max-h-[394px]">
             {filteredStudents.map(s => {
               const isOnline = onlineSet.has(s.id);
               return (
                 <button 
                   key={s.id} 
                   onClick={() => setSelectedStudent(s)}
-                  className="w-full text-left p-3 rounded-sm flex items-center gap-3 hover:bg-zinc-800 transition-colors border border-transparent hover:border-zinc-700"
+                  className={`w-full text-left p-2.5 rounded-sm flex items-center gap-3 transition-colors border h-[58px] shrink-0 ${
+                    selectedStudent?.id === s.id 
+                      ? 'bg-zinc-800 border-amber-500/50' 
+                      : 'hover:bg-zinc-800/70 border-transparent hover:border-zinc-700'
+                  }`}
                 >
-                  <div className="relative">
+                  <div className="relative shrink-0">
                     {s.photoUrl ? (
                       <img src={s.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-zinc-700" />
                     ) : (
@@ -92,7 +98,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full"></div>
                     )}
                   </div>
-                  <span className="text-zinc-200 font-serif flex-1">{s.nickname || s.fullname || s.username}</span>
+                  <span className="text-zinc-200 font-serif flex-1 truncate">{s.nickname || s.fullname || s.username}</span>
                 </button>
               );
             })}
@@ -115,6 +121,16 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
           <Button onClick={() => setIsManageDbOpen(true)} className="w-full justify-start gap-2" variant="secondary">
             <Database size={18} /> База знаний
           </Button>
+          {onOpenMarket && (
+            <Button onClick={() => onOpenMarket()} className="w-full justify-start gap-2 bg-amber-950/40 border-amber-500/40 text-amber-400 hover:bg-amber-950/60" variant="secondary">
+              <Store size={18} className="text-amber-500" /> Торговая площадка
+            </Button>
+          )}
+          {onOpenQuests && (
+            <Button onClick={() => onOpenQuests()} className="w-full justify-start gap-2 bg-amber-950/40 border-amber-500/40 text-amber-400 hover:bg-amber-950/60" variant="secondary">
+              <ScrollText size={18} className="text-amber-500" /> Доска квестов
+            </Button>
+          )}
         </div>
       </div>
 
@@ -156,7 +172,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
       <CreateItemModal isOpen={isCreateItemOpen} onClose={() => setIsCreateItemOpen(false)} />
       <CreateAbilityModal isOpen={isCreateAbilityOpen} onClose={() => setIsCreateAbilityOpen(false)} />
       <ImportJsonModal isOpen={isImportJsonOpen} onClose={() => setIsImportJsonOpen(false)} />
-      <ManageDbModal isOpen={isManageDbOpen} onClose={() => setIsManageDbOpen(false)} state={state} />
+      <ManageDbModal isOpen={isManageDbOpen} onClose={() => setIsManageDbOpen(false)} state={state} onOpenMarket={onOpenMarket} />
     </div>
   );
 }
@@ -166,6 +182,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
 function StudentProfile({ adminView, student, state, onClose }: { adminView?: boolean, student: User, state: GameState, onClose: () => void }) {
   const [photoUrl, setPhotoUrl] = useState(student.photoUrl || '');
   const [nickname, setNickname] = useState(student.nickname || '');
+  const [balance, setBalance] = useState<number>(Number(student.balance) || 0);
   const [isGiveItemOpen, setIsGiveItemOpen] = useState(false);
   const [isTeachAbilityOpen, setIsTeachAbilityOpen] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
@@ -183,7 +200,20 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
   React.useEffect(() => {
     setPhotoUrl(student.photoUrl || '');
     setNickname(student.nickname || '');
+    setBalance(Number(student.balance) || 0);
   }, [student]);
+
+  const handleUpdateBalance = async () => {
+    try {
+      await fetch('/api/admin/set-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: student.id, balance })
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const studentItems = state.userItems.filter(ui => ui.userId === student.id).map(ui => {
     const item = state.items.find(i => i.id === ui.itemId);
@@ -284,6 +314,23 @@ function StudentProfile({ adminView, student, state, onClose }: { adminView?: bo
               <Button onClick={handleUpdatePhoto} variant="secondary">Сохранить</Button>
             </div>
           </div>
+          {student.role === 'student' && (
+            <div className="space-y-2">
+              <label className="text-xs text-amber-500/80 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                <Coins size={14} className="text-amber-500" /> Баланс монет (🪙)
+              </label>
+              <div className="flex gap-2">
+                <Input 
+                  type="number" 
+                  min="0"
+                  value={balance} 
+                  onChange={e => setBalance(Math.max(0, parseInt(e.target.value) || 0))} 
+                  placeholder="Баланс ученика"
+                />
+                <Button onClick={handleUpdateBalance} variant="secondary">Сохранить</Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -904,7 +951,7 @@ function ImportJsonModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => 
   );
 }
 
-function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: () => void, state: GameState }) {
+function ManageDbModal({ isOpen, onClose, state, onOpenMarket }: { isOpen: boolean, onClose: () => void, state: GameState, onOpenMarket?: (itemId?: number) => void }) {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editingAbility, setEditingAbility] = useState<any>(null);
   const [itemSearch, setItemSearch] = useState('');
@@ -1003,6 +1050,18 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
                   </Tooltip>
                 </div>
                 <div className="flex gap-2">
+                  {onOpenMarket && (
+                    <button 
+                      onClick={() => {
+                        onClose();
+                        onOpenMarket(item.id);
+                      }}
+                      className="text-amber-500 hover:text-amber-300 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800 hover:border-amber-500/50"
+                      title="Выставить на торговую площадку"
+                    >
+                      <Store size={14} />
+                    </button>
+                  )}
                   <button 
                     onClick={() => setEditingItem(item)}
                     className="text-zinc-500 hover:text-amber-500 transition-colors p-2 bg-zinc-950 rounded-sm border border-zinc-800"
@@ -1130,7 +1189,7 @@ function ManageDbModal({ isOpen, onClose, state }: { isOpen: boolean, onClose: (
   );
 }
 
-function AdminAbilityCard({ ua, ability }: { ua: any, ability: any }) {
+function AdminAbilityCard({ ua, ability }: { ua: any, ability: any, key?: React.Key }) {
   const [cdLeft, setCdLeft] = useState(0);
 
   useEffect(() => {

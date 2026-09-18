@@ -5,6 +5,7 @@ export interface User {
   photoUrl: string | null;
   fullname?: string;
   nickname?: string;
+  balance?: number;
 }
 export interface Item {
   id: number;
@@ -53,6 +54,32 @@ export interface Log {
   message: string;
   createdAt: number;
 }
+export interface MarketItem {
+  id: number;
+  itemId: number;
+  price: number;
+  stock?: number;
+  createdAt?: number;
+}
+export interface Quest {
+  id: number;
+  title: string;
+  description: string;
+  rewardCoins: number;
+  rewardItemId?: number | null;
+  rewardAbilityId?: number | null;
+  maxAccepts: number; // -1 for unlimited, or positive number
+  createdAt: number;
+  createdByAdminId?: number | null;
+}
+export interface UserQuest {
+  id: number;
+  userId: number;
+  questId: number;
+  status: 'active' | 'completed' | 'cancelled';
+  acceptedAt: number;
+  completedAt?: number | null;
+}
 export interface GameState {
   users: User[];
   items: Item[];
@@ -62,4 +89,7 @@ export interface GameState {
   userEffects: UserEffect[];
   logs: Log[];
   onlineUserIds: number[];
+  marketItems: MarketItem[];
+  quests: Quest[];
+  userQuests: UserQuest[];
 }
