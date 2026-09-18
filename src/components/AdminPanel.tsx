@@ -2,18 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw, Store, Coins, ScrollText } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw, Store, Coins } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 import { ActiveEffects } from './ActiveEffects';
 
 interface AdminPanelProps {
   state: GameState;
   admin: User;
-  onOpenMarket?: (itemId?: number) => void;
-  onOpenQuests?: () => void;
 }
 
-export function AdminPanel({ state, admin, onOpenMarket, onOpenQuests }: AdminPanelProps) {
+export function AdminPanel({ state, admin }: AdminPanelProps) {
   const students = state.users.filter(u => u.role === 'student');
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [isCreateItemOpen, setIsCreateItemOpen] = useState(false);
@@ -121,16 +119,6 @@ export function AdminPanel({ state, admin, onOpenMarket, onOpenQuests }: AdminPa
           <Button onClick={() => setIsManageDbOpen(true)} className="w-full justify-start gap-2" variant="secondary">
             <Database size={18} /> База знаний
           </Button>
-          {onOpenMarket && (
-            <Button onClick={() => onOpenMarket()} className="w-full justify-start gap-2 bg-amber-950/40 border-amber-500/40 text-amber-400 hover:bg-amber-950/60" variant="secondary">
-              <Store size={18} className="text-amber-500" /> Торговая площадка
-            </Button>
-          )}
-          {onOpenQuests && (
-            <Button onClick={() => onOpenQuests()} className="w-full justify-start gap-2 bg-amber-950/40 border-amber-500/40 text-amber-400 hover:bg-amber-950/60" variant="secondary">
-              <ScrollText size={18} className="text-amber-500" /> Доска квестов
-            </Button>
-          )}
         </div>
       </div>
 
@@ -172,7 +160,7 @@ export function AdminPanel({ state, admin, onOpenMarket, onOpenQuests }: AdminPa
       <CreateItemModal isOpen={isCreateItemOpen} onClose={() => setIsCreateItemOpen(false)} />
       <CreateAbilityModal isOpen={isCreateAbilityOpen} onClose={() => setIsCreateAbilityOpen(false)} />
       <ImportJsonModal isOpen={isImportJsonOpen} onClose={() => setIsImportJsonOpen(false)} />
-      <ManageDbModal isOpen={isManageDbOpen} onClose={() => setIsManageDbOpen(false)} state={state} onOpenMarket={onOpenMarket} />
+      <ManageDbModal isOpen={isManageDbOpen} onClose={() => setIsManageDbOpen(false)} state={state} />
     </div>
   );
 }

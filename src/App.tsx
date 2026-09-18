@@ -239,74 +239,14 @@ export default function App() {
           <AdminPanel 
             state={state} 
             admin={currentUser} 
-            onOpenMarket={(itemId) => {
-              setMarketInitialItemId(itemId || null);
-              setIsMarketOpen(true);
-            }}
-            onOpenQuests={() => setIsQuestBoardOpen(true)}
           />
         ) : (
           <StudentPanel 
             state={state} 
             user={currentUser} 
-            onOpenMarket={() => {
-              setMarketInitialItemId(null);
-              setIsMarketOpen(true);
-            }}
-            onOpenQuests={() => setIsQuestBoardOpen(true)}
           />
         )}
       </main>
-
-      {/* Floating launcher buttons in empty space on the left */}
-      <div className="fixed left-4 bottom-6 z-40 flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
-        {/* Marketplace */}
-        <button
-          onClick={() => {
-            setMarketInitialItemId(null);
-            setIsMarketOpen(true);
-          }}
-          className="group relative flex items-center gap-2.5 bg-zinc-950/95 hover:bg-zinc-900 border border-amber-500/60 hover:border-amber-400 px-3.5 py-2.5 rounded-full shadow-2xl shadow-black hover:shadow-amber-500/20 transition-all duration-200"
-          title="Открыть Торговую площадку"
-        >
-          <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
-            <Store size={18} />
-          </div>
-          <div className="flex flex-col text-left pr-1">
-            <span className="font-serif text-xs font-bold text-amber-400 tracking-wider uppercase">
-              Торговая площадка
-            </span>
-            <span className="text-[11px] font-mono text-amber-300 flex items-center gap-1 font-semibold">
-              <Coins size={11} className="text-amber-400" />
-              {currentUser.balance || 0} монет
-            </span>
-          </div>
-        </button>
-
-        {/* Quest Board ("доска с бумажками") */}
-        <button
-          onClick={() => setIsQuestBoardOpen(true)}
-          className="group relative flex items-center gap-2.5 bg-zinc-950/95 hover:bg-zinc-900 border border-amber-600/60 hover:border-amber-400 px-3.5 py-2.5 rounded-full shadow-2xl shadow-black hover:shadow-amber-500/20 transition-all duration-200"
-          title="Открыть Доску квестов"
-        >
-          <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform relative">
-            <ScrollText size={18} />
-            {activeQuestsCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-zinc-950 text-[10px] font-bold flex items-center justify-center shadow">
-                {activeQuestsCount}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col text-left pr-1">
-            <span className="font-serif text-xs font-bold text-amber-400 tracking-wider uppercase">
-              Доска квестов
-            </span>
-            <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-medium">
-              {currentUser.role === 'admin' ? 'Управление заданиями' : activeQuestsCount > 0 ? `${activeQuestsCount} активных` : 'Доступны задания'}
-            </span>
-          </div>
-        </button>
-      </div>
 
       <MarketplaceModal
         isOpen={isMarketOpen}

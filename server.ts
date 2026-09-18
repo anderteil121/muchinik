@@ -1009,16 +1009,16 @@ app.post('/api/quests/assign', async (req, res) => {
     const student = studentQuery.rows[0];
 
     const existing = await db.execute({
-      sql: 'SELECT id FROM user_quests WHERE userId = ? AND questId = ? AND status = "active"',
-      args: [studentId, questId]
+      sql: "SELECT id FROM user_quests WHERE userId = ? AND questId = ? AND status = 'active'",
+      args: [Number(studentId), Number(questId)]
     });
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Этот квест уже активен у данного ученика' });
     }
 
     await db.execute({
-      sql: 'INSERT INTO user_quests (userId, questId, status, acceptedAt) VALUES (?, ?, "active", ?)',
-      args: [studentId, questId, Date.now()]
+      sql: "INSERT INTO user_quests (userId, questId, status, acceptedAt) VALUES (?, ?, 'active', ?)",
+      args: [Number(studentId), Number(questId), Date.now()]
     });
 
     let archmageName = 'Архимаг';
@@ -1053,7 +1053,7 @@ app.post('/api/quests/accept', async (req, res) => {
 
     const userExisting = await db.execute({
       sql: 'SELECT id, status FROM user_quests WHERE userId = ? AND questId = ?',
-      args: [userId, questId]
+      args: [Number(userId), Number(questId)]
     });
     if (userExisting.rows.length > 0) {
       const activeOrDone = userExisting.rows.some((r: any) => r.status === 'active' || r.status === 'completed');
@@ -1065,8 +1065,8 @@ app.post('/api/quests/accept', async (req, res) => {
     const maxAccepts = Number(quest.maxAccepts);
     if (maxAccepts !== -1) {
       const currentAccepts = await db.execute({
-        sql: 'SELECT COUNT(*) as cnt FROM user_quests WHERE questId = ? AND status != "cancelled"',
-        args: [questId]
+        sql: "SELECT COUNT(*) as cnt FROM user_quests WHERE questId = ? AND status != 'cancelled'",
+        args: [Number(questId)]
       });
       const count = Number(currentAccepts.rows[0].cnt) || 0;
       if (count >= maxAccepts) {
@@ -1075,8 +1075,8 @@ app.post('/api/quests/accept', async (req, res) => {
     }
 
     await db.execute({
-      sql: 'INSERT INTO user_quests (userId, questId, status, acceptedAt) VALUES (?, ?, "active", ?)',
-      args: [userId, questId, Date.now()]
+      sql: "INSERT INTO user_quests (userId, questId, status, acceptedAt) VALUES (?, ?, 'active', ?)",
+      args: [Number(userId), Number(questId), Date.now()]
     });
 
     const userName = String(user.nickname || user.fullname || user.username || 'Ученик');
@@ -1086,14 +1086,14 @@ app.post('/api/quests/accept', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to accept quest' });
+    res.status(500).json({ error: 'Не удалось взять квест: ' + ((err as any)?.message || 'ошибка сервера') });
   }
 });
 
 app.post('/api/quests/complete', async (req, res) => {
   try {
     const { userQuestId, adminId } = req.body;
-    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [userQuestId] });
+    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
     if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
     const uq = uqQuery.rows[0];
 
@@ -1150,8 +1150,8 @@ app.post('/api/quests/complete', async (req, res) => {
     }
 
     await db.execute({
-      sql: 'UPDATE user_quests SET status = "completed", completedAt = ? WHERE id = ?',
-      args: [Date.now(), userQuestId]
+      sql: "UPDATE user_quests SET status = 'completed', completedAt = ? WHERE id = ?",
+      args: [Date.now(), Number(userQuestId)]
     });
 
     const userName = String(user.nickname || user.fullname || user.username || 'Ученик');
@@ -1179,7 +1179,7 @@ app.post('/api/quests/complete', async (req, res) => {
 app.post('/api/quests/cancel', async (req, res) => {
   try {
     const { userQuestId, adminId } = req.body;
-    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [userQuestId] });
+    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
     if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
     const uq = uqQuery.rows[0];
 
@@ -1189,7 +1189,7 @@ app.post('/api/quests/cancel', async (req, res) => {
     const userQuery = await db.execute({ sql: 'SELECT nickname, fullname, username FROM users WHERE id = ?', args: [uq.userId] });
     const studentName = userQuery.rows.length > 0 ? String(userQuery.rows[0].nickname || userQuery.rows[0].fullname || userQuery.rows[0].username) : 'Ученик';
 
-    await db.execute({ sql: 'DELETE FROM user_quests WHERE id = ?', args: [userQuestId] });
+    await db.execute({ sql: 'DELETE FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
 
     if (adminId) {
       let archmageName = 'Архимаг';

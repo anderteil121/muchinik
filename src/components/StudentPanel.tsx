@@ -2,34 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Modal, Select, Tooltip, Input } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Clock, Search, Filter, Coins, Store, ScrollText } from 'lucide-react';
+import { UserCircle, Clock, Search, Filter, Coins } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 import { ActiveEffects } from './ActiveEffects';
 
 interface StudentPanelProps {
   state: GameState;
   user: User;
-  onOpenMarket?: () => void;
-  onOpenQuests?: () => void;
 }
 
-export function StudentPanel({ state, user, onOpenMarket, onOpenQuests }: StudentPanelProps) {
+export function StudentPanel({ state, user }: StudentPanelProps) {
   const [targetModalOpen, setTargetModalOpen] = useState<{ abilityId?: number, userAbilityId?: number, itemId?: number, userItemId?: number, isItem?: boolean } | null>(null);
   const [rouletteState, setRouletteState] = useState<{ abilityId: number, userAbilityId: number, targetId?: number, chance: number, chancesJson?: string } | null>(null);
   const [itemSearch, setItemSearch] = useState('');
   const [abilitySearch, setAbilitySearch] = useState('');
   const [abilityFilters, setAbilityFilters] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  const userQuests = state.userQuests || [];
-  const quests = state.quests || [];
-  const myActiveQuests = userQuests
-    .filter(uq => Number(uq.userId) === Number(user.id) && uq.status === 'active')
-    .map(uq => ({
-      uq,
-      quest: quests.find(q => Number(q.id) === Number(uq.questId))
-    }))
-    .filter(item => !!item.quest);
 
   const toggleFilter = (filter: string) => {
     setAbilityFilters(prev => 
@@ -162,40 +150,7 @@ export function StudentPanel({ state, user, onOpenMarket, onOpenQuests }: Studen
                     <span>{user.balance || 0}</span>
                     <span className="text-xs text-amber-500/70 font-sans font-normal">монет</span>
                   </div>
-                  {onOpenMarket && (
-                    <button 
-                      onClick={onOpenMarket}
-                      className="text-xs font-serif text-amber-400 hover:text-amber-300 flex items-center gap-1.5 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-500/30 hover:border-amber-500/60 px-3 py-1 rounded-sm transition-colors shadow-sm"
-                    >
-                      <Store size={14} className="text-amber-500" /> Торговая площадка
-                    </button>
-                  )}
-                  {onOpenQuests && (
-                    <button 
-                      onClick={onOpenQuests}
-                      className="text-xs font-serif text-amber-400 hover:text-amber-300 flex items-center gap-1.5 bg-amber-950/30 hover:bg-amber-950/60 border border-amber-500/30 hover:border-amber-500/60 px-3 py-1 rounded-sm transition-colors shadow-sm"
-                    >
-                      <ScrollText size={14} className="text-amber-500" /> Доска квестов
-                      {myActiveQuests.length > 0 && (
-                        <span className="bg-amber-500 text-zinc-950 font-bold px-1.5 py-0.2 rounded-full font-mono text-[10px]">
-                          {myActiveQuests.length}
-                        </span>
-                      )}
-                    </button>
-                  )}
                 </div>
-                {myActiveQuests.length > 0 && onOpenQuests && (
-                  <div 
-                    onClick={onOpenQuests}
-                    className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-sm bg-amber-950/40 border border-amber-500/30 hover:border-amber-500/60 text-xs text-amber-300/90 cursor-pointer transition-colors shadow-sm"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                    <span>Активное поручение: <strong className="text-amber-200">{myActiveQuests[0].quest?.title}</strong></span>
-                    {myActiveQuests.length > 1 && (
-                      <span className="text-zinc-500 font-mono text-[11px]">(+{myActiveQuests.length - 1})</span>
-                    )}
-                  </div>
-                )}
                 <ActiveEffects userId={user.id} state={state} />
               </div>
           </div>
