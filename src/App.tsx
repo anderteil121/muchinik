@@ -17,6 +17,7 @@ export default function App() {
   const [isMarketOpen, setIsMarketOpen] = useState(false);
   const [marketInitialItemId, setMarketInitialItemId] = useState<number | null>(null);
   const [isQuestBoardOpen, setIsQuestBoardOpen] = useState(false);
+  const [questBoardInitialTab, setQuestBoardInitialTab] = useState<'available' | 'my_quests' | 'review' | 'manage' | undefined>(undefined);
 
   useEffect(() => {
     if (!user) return;
@@ -175,7 +176,7 @@ export default function App() {
   const quests = state.quests || [];
   const activeQuestsCount = userQuests.filter(uq => Number(uq.userId) === Number(currentUser.id) && uq.status === 'active').length;
   const pendingReviewsCount = userQuests.filter(uq => uq.status === 'pending_review').length;
-  const [questBoardInitialTab, setQuestBoardInitialTab] = useState<'available' | 'my_quests' | 'review' | 'manage' | undefined>(undefined);
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 font-sans flex flex-col relative">
