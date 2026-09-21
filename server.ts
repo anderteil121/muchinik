@@ -76,6 +76,9 @@ async function initDB() {
   try { await db.execute('ALTER TABLE items ADD COLUMN target TEXT DEFAULT "self";'); } catch (e) { /* Ignore if exists */ }
   try { await db.execute('ALTER TABLE items ADD COLUMN duration INTEGER DEFAULT 0;'); } catch (e) { /* Ignore if exists */ }
   try { await db.execute('ALTER TABLE user_effects ADD COLUMN itemId INTEGER;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE user_quests ADD COLUMN submissionNote TEXT DEFAULT NULL;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE user_quests ADD COLUMN submittedAt INTEGER DEFAULT NULL;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE user_quests ADD COLUMN reviewNote TEXT DEFAULT NULL;'); } catch (e) { /* Ignore if exists */ }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS market_items (
@@ -83,9 +86,13 @@ async function initDB() {
       itemId INTEGER,
       price INTEGER DEFAULT 0,
       stock INTEGER DEFAULT -1,
-      createdAt INTEGER
+      createdAt INTEGER,
+      sellerId INTEGER,
+      sellerName TEXT
     );
   `);
+  try { await db.execute('ALTER TABLE market_items ADD COLUMN sellerId INTEGER DEFAULT NULL;'); } catch (e) { /* Ignore if exists */ }
+  try { await db.execute('ALTER TABLE market_items ADD COLUMN sellerName TEXT DEFAULT NULL;'); } catch (e) { /* Ignore if exists */ }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS user_effects (
@@ -770,25 +777,27 @@ app.post('/api/market/list', async (req, res) => {
     const numericStock = stock !== undefined && stock !== null ? parseInt(stock, 10) : -1;
     const createdAt = Date.now();
 
-    const insertResult = await db.execute({
-      sql: 'INSERT INTO market_items (itemId, price, stock, createdAt) VALUES (?, ?, ?, ?)',
-      args: [itemId, numericPrice, numericStock, createdAt]
-    });
-
     let archmageName = 'Архимаг';
+    let sellerId = null;
     if (adminId) {
-      const adminQuery = await db.execute({ sql: 'SELECT nickname, fullname, username FROM users WHERE id = ?', args: [adminId] });
+      const adminQuery = await db.execute({ sql: 'SELECT id, nickname, fullname, username FROM users WHERE id = ?', args: [adminId] });
       if (adminQuery.rows.length > 0) {
+        sellerId = Number(adminQuery.rows[0].id);
         archmageName = String(adminQuery.rows[0].nickname || adminQuery.rows[0].fullname || adminQuery.rows[0].username || 'Архимаг');
       }
     }
 
+    const insertResult = await db.execute({
+      sql: 'INSERT INTO market_items (itemId, price, stock, createdAt, sellerId, sellerName) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [itemId, numericPrice, numericStock, createdAt, sellerId, archmageName]
+    });
+
     await logAction(`[${archmageName}] выставил в торговую лавку: [${item.name}] за ${numericPrice} 🪙`);
     io.emit('state_updated');
-    res.json({ success: true, id: insertResult.lastInsertRowid });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to list item' });
+    res.json({ success: true, id: Number(insertResult.lastInsertRowid) });
+  } catch (err: any) {
+    console.error('Error in /api/market/list:', err);
+    res.status(500).json({ error: err?.message || 'Failed to list item' });
   }
 });
 
@@ -1090,9 +1099,123 @@ app.post('/api/quests/accept', async (req, res) => {
   }
 });
 
+app.post('/api/quests/submit', async (req, res) => {
+  try {
+    const { userQuestId, userId, submissionNote } = req.body;
+    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
+    if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
+    const uq = uqQuery.rows[0];
+
+    if (Number(uq.userId) !== Number(userId)) {
+      return res.status(403).json({ error: 'Вы не являетесь исполнителем этого квеста' });
+    }
+
+    if (uq.status === 'completed') {
+      return res.status(400).json({ error: 'Этот квест уже зачтен' });
+    }
+    if (uq.status === 'pending_review') {
+      return res.status(400).json({ error: 'Квест уже отправлен на проверку' });
+    }
+
+    const questQuery = await db.execute({ sql: 'SELECT title FROM quests WHERE id = ?', args: [uq.questId] });
+    const questTitle = questQuery.rows.length > 0 ? String(questQuery.rows[0].title) : 'Квест';
+
+    const userQuery = await db.execute({ sql: 'SELECT nickname, fullname, username FROM users WHERE id = ?', args: [userId] });
+    const studentName = userQuery.rows.length > 0 ? String(userQuery.rows[0].nickname || userQuery.rows[0].fullname || userQuery.rows[0].username) : 'Ученик';
+
+    const note = submissionNote ? String(submissionNote).trim() : null;
+
+    await db.execute({
+      sql: "UPDATE user_quests SET status = 'pending_review', submittedAt = ?, submissionNote = ?, reviewNote = NULL WHERE id = ?",
+      args: [Date.now(), note, Number(userQuestId)]
+    });
+
+    await logAction(`[${studentName}] сдал отчет по квесту [${questTitle}] на проверку Архимагу!`);
+
+    io.emit('state_updated');
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Не удалось отправить квест на проверку' });
+  }
+});
+
+app.post('/api/quests/retract', async (req, res) => {
+  try {
+    const { userQuestId, userId } = req.body;
+    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
+    if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
+    const uq = uqQuery.rows[0];
+
+    if (Number(uq.userId) !== Number(userId)) {
+      return res.status(403).json({ error: 'Нет доступа' });
+    }
+    if (uq.status !== 'pending_review') {
+      return res.status(400).json({ error: 'Квест не находится на проверке' });
+    }
+
+    await db.execute({
+      sql: "UPDATE user_quests SET status = 'active' WHERE id = ?",
+      args: [Number(userQuestId)]
+    });
+
+    io.emit('state_updated');
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Не удалось отозвать квест' });
+  }
+});
+
+app.post('/api/quests/reject', async (req, res) => {
+  try {
+    const { userQuestId, adminId, reason } = req.body;
+    const adminQuery = await db.execute({ sql: 'SELECT role, nickname, fullname, username FROM users WHERE id = ?', args: [adminId] });
+    if (adminQuery.rows.length === 0 || adminQuery.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Только Архимаг может проверять квесты' });
+    }
+    const admin = adminQuery.rows[0];
+    const archmageName = String(admin.nickname || admin.fullname || admin.username || 'Архимаг');
+
+    const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
+    if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
+    const uq = uqQuery.rows[0];
+
+    const questQuery = await db.execute({ sql: 'SELECT title FROM quests WHERE id = ?', args: [uq.questId] });
+    const questTitle = questQuery.rows.length > 0 ? String(questQuery.rows[0].title) : 'Квест';
+
+    const userQuery = await db.execute({ sql: 'SELECT nickname, fullname, username FROM users WHERE id = ?', args: [uq.userId] });
+    const studentName = userQuery.rows.length > 0 ? String(userQuery.rows[0].nickname || userQuery.rows[0].fullname || userQuery.rows[0].username) : 'Ученик';
+
+    const reviewNote = reason ? String(reason).trim() : 'Требуется доработка';
+
+    await db.execute({
+      sql: "UPDATE user_quests SET status = 'active', reviewNote = ? WHERE id = ?",
+      args: [reviewNote, Number(userQuestId)]
+    });
+
+    await logAction(`[${archmageName}] вернул на доработку квест [${questTitle}] ученика [${studentName}]. Замечание: «${reviewNote}»`);
+
+    io.emit('state_updated');
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Не удалось вернуть квест на доработку' });
+  }
+});
+
 app.post('/api/quests/complete', async (req, res) => {
   try {
     const { userQuestId, adminId } = req.body;
+    if (!adminId) {
+      return res.status(403).json({ error: 'Сдача квеста требует проверки Архимагом. Отправьте отчет на проверку!' });
+    }
+    const adminQuery = await db.execute({ sql: 'SELECT role, nickname, fullname, username FROM users WHERE id = ?', args: [adminId] });
+    if (adminQuery.rows.length === 0 || adminQuery.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Только Архимаг может зачесть выполнение квеста' });
+    }
+    const admin = adminQuery.rows[0];
+
     const uqQuery = await db.execute({ sql: 'SELECT * FROM user_quests WHERE id = ?', args: [Number(userQuestId)] });
     if (uqQuery.rows.length === 0) return res.status(404).json({ error: 'Квест не найден' });
     const uq = uqQuery.rows[0];
@@ -1156,17 +1279,9 @@ app.post('/api/quests/complete', async (req, res) => {
 
     const userName = String(user.nickname || user.fullname || user.username || 'Ученик');
     const rewardsText = rewardParts.length > 0 ? rewardParts.join(', ') : 'благословение Мастера';
+    const archmageName = String(admin.nickname || admin.fullname || admin.username || 'Архимаг');
 
-    if (adminId) {
-      let archmageName = 'Архимаг';
-      const adminQuery = await db.execute({ sql: 'SELECT nickname, fullname, username FROM users WHERE id = ?', args: [adminId] });
-      if (adminQuery.rows.length > 0) {
-        archmageName = String(adminQuery.rows[0].nickname || adminQuery.rows[0].fullname || adminQuery.rows[0].username || 'Архимаг');
-      }
-      await logAction(`[${archmageName}] зачел выполнение квеста [${quest.title}] ученику [${userName}]! Получено: ${rewardsText}`);
-    } else {
-      await logAction(`[${userName}] завершил квест [${quest.title}]! Получено: ${rewardsText}`);
-    }
+    await logAction(`[${archmageName}] зачел выполнение квеста [${quest.title}] ученику [${userName}]! Получено: ${rewardsText}`);
 
     io.emit('state_updated');
     res.json({ success: true, rewards: rewardParts });

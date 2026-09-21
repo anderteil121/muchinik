@@ -13,7 +13,8 @@ import {
   Package, 
   Sparkles,
   Users,
-  Info
+  Info,
+  ShieldCheck
 } from 'lucide-react';
 
 interface MarketplaceModalProps {
@@ -259,10 +260,15 @@ export function MarketplaceModal({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredItems.map(({ id: marketId, price, stock, item }) => {
+                {filteredItems.map(({ id: marketId, price, stock, item, sellerId, sellerName }) => {
                   if (!item) return null;
                   const canAfford = userBalance >= price;
                   const isBuyingThis = buyingId === marketId;
+
+                  const sellerUser = sellerId ? state.users.find(u => Number(u.id) === Number(sellerId)) : null;
+                  const sellerDisplayName = sellerUser 
+                    ? (sellerUser.nickname || sellerUser.fullname || sellerUser.username)
+                    : (sellerName || 'Архимаг');
 
                   return (
                     <div 
@@ -339,9 +345,22 @@ export function MarketplaceModal({
                         </div>
 
                         {/* Description */}
-                        <p className="text-xs text-zinc-400 line-clamp-3 mb-4 leading-relaxed font-sans">
+                        <p className="text-xs text-zinc-400 line-clamp-3 mb-3 leading-relaxed font-sans">
                           {item.description}
                         </p>
+
+                        {/* Seller Admin Info */}
+                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 bg-zinc-900/60 border border-zinc-800/80 rounded px-2 py-1 mb-3">
+                          {sellerUser?.photoUrl ? (
+                            <img src={sellerUser.photoUrl} alt="" className="w-3.5 h-3.5 rounded-full object-cover border border-amber-500/40 shrink-0" />
+                          ) : (
+                            <ShieldCheck size={13} className="text-amber-400 shrink-0" />
+                          )}
+                          <span className="text-zinc-500">Выставил:</span>
+                          <span className="text-amber-300 font-medium truncate font-serif" title={`Выставил: ${sellerDisplayName}`}>
+                            {sellerDisplayName}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Bottom: Price + Buy Button */}
@@ -387,6 +406,9 @@ export function MarketplaceModal({
         <ListItemModal
           isOpen={isListingModalOpen}
           onClose={() => setIsListingModalOpen(false)}
+          onSuccess={(itemName) => {
+            setFeedback({ type: 'success', message: `«${itemName}» успешно выставлен на торговую площадку!` });
+          }}
           state={state}
           adminId={currentUser.id}
           initialItemId={effectiveInitialItemId}
@@ -419,12 +441,14 @@ export function MarketplaceModal({
 export function ListItemModal({
   isOpen,
   onClose,
+  onSuccess,
   state,
   adminId,
   initialItemId
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (itemName: string) => void;
   state: GameState;
   adminId: number;
   initialItemId?: number | null;
@@ -481,6 +505,7 @@ export function ListItemModal({
         throw new Error(data.error || 'Ошибка добавления');
       }
 
+      onSuccess?.(selectedItem?.name || 'Предмет');
       onClose();
     } catch (err: any) {
       setError(err.message || 'Ошибка сервера');

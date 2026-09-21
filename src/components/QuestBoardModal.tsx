@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameState, User, Quest, UserQuest, Item, Ability } from '../types';
 import { Button, Input, Select, Tooltip } from './ui';
 import {
@@ -16,29 +16,46 @@ import {
   Search,
   Check,
   Award,
-  BookOpen
+  BookOpen,
+  ClipboardCheck,
+  Send,
+  RotateCcw,
+  AlertCircle,
+  Hourglass
 } from 'lucide-react';
+import { QuestReviewPanel } from './QuestReviewPanel';
+import { SubmitQuestReportModal, RejectQuestModal } from './QuestSubmissionModals';
 
 interface QuestBoardModalProps {
   isOpen: boolean;
   onClose: () => void;
   state: GameState;
   currentUser: User;
+  initialTab?: 'available' | 'my_quests' | 'review' | 'manage';
 }
 
 export function QuestBoardModal({
   isOpen,
   onClose,
   state,
-  currentUser
+  currentUser,
+  initialTab
 }: QuestBoardModalProps) {
-  const [activeTab, setActiveTab] = useState<'available' | 'my_quests' | 'manage'>('available');
+  const [activeTab, setActiveTab] = useState<'available' | 'my_quests' | 'review' | 'manage'>(initialTab || 'available');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [assignQuestTarget, setAssignQuestTarget] = useState<Quest | null>(null);
+  const [submitModalTarget, setSubmitModalTarget] = useState<UserQuest | null>(null);
+  const [rejectModalTarget, setRejectModalTarget] = useState<UserQuest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterReward, setFilterReward] = useState<'all' | 'coins' | 'item' | 'ability'>('all');
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
 
   if (!isOpen) return null;
 
@@ -61,8 +78,12 @@ export function QuestBoardModal({
   // Current user's userQuests
   const myUserQuests = userQuests.filter(uq => Number(uq.userId) === Number(currentUser.id));
   const myActiveUserQuests = myUserQuests.filter(uq => uq.status === 'active');
+  const myPendingUserQuests = myUserQuests.filter(uq => uq.status === 'pending_review');
   const myCompletedUserQuests = myUserQuests.filter(uq => uq.status === 'completed');
-  const myAcceptedQuestIds = new Set(myUserQuests.map(uq => Number(uq.questId)));
+  const myAcceptedQuestIds = new Set(myUserQuests.filter(uq => uq.status !== 'cancelled').map(uq => Number(uq.questId)));
+
+  // Admin pending reviews
+  const pendingReviews = userQuests.filter(uq => uq.status === 'pending_review');
 
   // Available quests for students:
   // Must have slots remaining (or -1) AND not already taken by this student (unless looking in all quests)
@@ -116,7 +137,60 @@ export function QuestBoardModal({
     }
   };
 
-  const handleCompleteQuest = async (userQuestId: number) => {
+  const handleSubmitQuest = async (userQuestId: number, note: string) => {
+    setActionLoadingId(userQuestId);
+    try {
+      const res = await fetch('/api/quests/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userQuestId,
+          userId: currentUser.id,
+          submissionNote: note
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Не удалось отправить квест на проверку');
+      } else {
+        setSubmitModalTarget(null);
+        showBanner('Отчет отправлен Архимагу на проверку! Ожидайте утверждения награды.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка при отправке отчета');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRetractQuest = async (userQuestId: number) => {
+    if (!confirm('Отозвать отчет по квесту с проверки? Вы сможете отредактировать его и отправить повторно.')) return;
+    setActionLoadingId(userQuestId);
+    try {
+      const res = await fetch('/api/quests/retract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userQuestId,
+          userId: currentUser.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Не удалось отозвать отчет');
+      } else {
+        showBanner('Отчет отозван, квест возвращен в активные.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка при отзыве отчета');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleApproveQuest = async (userQuestId: number) => {
     setActionLoadingId(userQuestId);
     try {
       const res = await fetch('/api/quests/complete', {
@@ -124,22 +198,48 @@ export function QuestBoardModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userQuestId,
-          adminId: isAdmin ? currentUser.id : undefined,
-          userId: currentUser.id
+          adminId: currentUser.id
         })
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Не удалось завершить квест');
+        alert(data.error || 'Не удалось зачесть квест');
       } else {
         const rewardsText = Array.isArray(data.rewards) && data.rewards.length > 0 
-          ? `Получено: ${data.rewards.join(', ')}`
+          ? `Начислено: ${data.rewards.join(', ')}`
           : 'Награда успешно начислена!';
-        showBanner(`Поздравляем с выполнением квеста! ${rewardsText}`);
+        showBanner(`Поручение успешно зачтено! ${rewardsText}`);
       }
     } catch (err) {
       console.error(err);
-      alert('Ошибка при завершении квеста');
+      alert('Ошибка при зачете поручения');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRejectQuest = async (userQuestId: number, reason: string) => {
+    setActionLoadingId(userQuestId);
+    try {
+      const res = await fetch('/api/quests/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userQuestId,
+          adminId: currentUser.id,
+          reason
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Не удалось вернуть квест');
+      } else {
+        setRejectModalTarget(null);
+        showBanner('Квест возвращен ученику на доработку с вашим замечанием.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка при возврате квеста');
     } finally {
       setActionLoadingId(null);
     }
@@ -277,7 +377,31 @@ export function QuestBoardModal({
                   {myActiveUserQuests.length}
                 </span>
               )}
+              {myPendingUserQuests.length > 0 && (
+                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                  +{myPendingUserQuests.length} ⏳
+                </span>
+              )}
             </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => setActiveTab('review')}
+                className={`px-3 py-1.5 text-xs font-serif rounded-sm flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                  activeTab === 'review'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent'
+                }`}
+              >
+                <ClipboardCheck size={14} />
+                Проверка заданий
+                {pendingReviews.length > 0 && (
+                  <span className="bg-amber-500 animate-pulse text-zinc-950 font-bold text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                    {pendingReviews.length}
+                  </span>
+                )}
+              </button>
+            )}
 
             {isAdmin && (
               <button
@@ -537,6 +661,21 @@ export function QuestBoardModal({
                               {quest.description || 'Поручение от наставников Академии.'}
                             </p>
 
+                            {/* Archmage review rejection note if any */}
+                            {uq.reviewNote && (
+                              <div className="mt-2.5 p-2.5 rounded bg-red-950/40 border border-red-500/40 text-xs">
+                                <div className="font-bold text-red-400 flex items-center gap-1 mb-1">
+                                  <AlertCircle size={13} /> Замечание Архимага:
+                                </div>
+                                <div className="text-zinc-200 italic">
+                                  «{uq.reviewNote}»
+                                </div>
+                                <div className="text-[10px] text-zinc-400 mt-1">
+                                  Устраните замечание и отправьте отчет повторно.
+                                </div>
+                              </div>
+                            )}
+
                             {/* Rewards */}
                             <div className="mt-3 pt-3 border-t border-zinc-800">
                               <div className="text-[10px] uppercase font-serif text-zinc-400 font-semibold mb-1.5 flex items-center gap-1">
@@ -576,12 +715,12 @@ export function QuestBoardModal({
 
                             <Button
                               variant="primary"
-                              onClick={() => handleCompleteQuest(Number(uq.id))}
+                              onClick={() => setSubmitModalTarget(uq)}
                               disabled={isLoading}
-                              className="text-xs py-1.5 px-3 bg-green-600 hover:bg-green-500 text-zinc-950 font-bold border-green-700 flex items-center gap-1"
+                              className="text-xs py-1.5 px-3 bg-amber-600 hover:bg-amber-500 text-zinc-950 font-bold border-amber-700 flex items-center gap-1.5 shadow-sm"
                             >
-                              <CheckCircle2 size={13} />
-                              {isLoading ? 'Завершение...' : 'Сдать квест'}
+                              <Send size={13} />
+                              {isLoading ? 'Отправка...' : 'Сдать на проверку'}
                             </Button>
                           </div>
                         </div>
@@ -590,6 +729,87 @@ export function QuestBoardModal({
                   </div>
                 )}
               </div>
+
+              {/* Pending Review Section (Submitted by student) */}
+              {myPendingUserQuests.length > 0 && (
+                <div className="pt-3">
+                  <div className="flex items-center justify-between mb-3 border-b border-zinc-800 pb-2">
+                    <h3 className="font-serif text-base text-amber-400 font-bold flex items-center gap-2">
+                      <Hourglass size={16} className="text-amber-500 animate-pulse" />
+                      На проверке у Архимага ({myPendingUserQuests.length})
+                    </h3>
+                    <span className="text-xs text-zinc-500">
+                      Ожидает подтверждения Мастера
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {myPendingUserQuests.map(uq => {
+                      const quest = quests.find(q => Number(q.id) === Number(uq.questId));
+                      if (!quest) return null;
+                      const isLoading = actionLoadingId === Number(uq.id);
+
+                      return (
+                        <div
+                          key={uq.id}
+                          className="bg-zinc-900 border border-amber-500/40 rounded-sm p-4 flex flex-col justify-between shadow-lg shadow-black"
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-serif text-base font-bold text-amber-300">
+                                {quest.title}
+                              </h4>
+                              <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                                <Clock size={11} className="animate-pulse" />
+                                На проверке
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-zinc-300 mt-2 leading-relaxed">
+                              {quest.description || 'Поручение от наставников Академии.'}
+                            </p>
+
+                            {uq.submissionNote && (
+                              <div className="mt-3 p-2.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs">
+                                <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">
+                                  Ваш отправленный отчет:
+                                </div>
+                                <div className="text-zinc-300 italic">
+                                  «{uq.submissionNote}»
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Rewards */}
+                            <div className="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2 text-xs text-zinc-400">
+                              <span>Ожидаемая награда:</span>
+                              {Number(quest.rewardCoins) > 0 && (
+                                <span className="font-mono font-bold text-amber-400">+{quest.rewardCoins} 🪙</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-zinc-500">
+                              {uq.submittedAt ? `Отправлено ${new Date(uq.submittedAt).toLocaleDateString()}` : 'Ожидает проверки'}
+                            </span>
+
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleRetractQuest(Number(uq.id))}
+                              disabled={isLoading}
+                              className="text-xs py-1 px-2.5 text-zinc-400 hover:text-zinc-200 border-zinc-700 flex items-center gap-1"
+                            >
+                              <RotateCcw size={12} />
+                              Отозвать отчет
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Completed Quests Section */}
               {myCompletedUserQuests.length > 0 && (
@@ -638,6 +858,17 @@ export function QuestBoardModal({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB: Admin Quest Review Panel */}
+          {activeTab === 'review' && isAdmin && (
+            <QuestReviewPanel
+              state={state}
+              currentUser={currentUser}
+              onApproveQuest={handleApproveQuest}
+              onOpenRejectModal={(uq) => setRejectModalTarget(uq)}
+              actionLoadingId={actionLoadingId}
+            />
           )}
 
           {/* TAB 3: Admin Management */}
@@ -759,6 +990,7 @@ export function QuestBoardModal({
                                   ? student.nickname || student.fullname || student.username
                                   : `Ученик #${uq.userId}`;
                                 const isCompleted = uq.status === 'completed';
+                                const isPending = uq.status === 'pending_review';
 
                                 return (
                                   <div
@@ -783,10 +1015,19 @@ export function QuestBoardModal({
                                         <span className="text-[10px] text-green-400 font-mono bg-green-950/60 px-1.5 py-0.5 rounded border border-green-800">
                                           Зачтено ✓
                                         </span>
+                                      ) : isPending ? (
+                                        <button
+                                          onClick={() => setActiveTab('review')}
+                                          className="text-[10px] py-0.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded font-semibold flex items-center gap-1 animate-pulse"
+                                          title="Проверить отчет ученика"
+                                        >
+                                          <Clock size={10} />
+                                          На проверке →
+                                        </button>
                                       ) : (
                                         <Button
                                           variant="primary"
-                                          onClick={() => handleCompleteQuest(Number(uq.id))}
+                                          onClick={() => handleApproveQuest(Number(uq.id))}
                                           disabled={actionLoadingId === Number(uq.id)}
                                           className="text-[10px] py-0.5 px-2 bg-green-700 hover:bg-green-600 text-white border-green-800"
                                           title="Зачесть выполнение и выдать награду"
@@ -815,6 +1056,7 @@ export function QuestBoardModal({
           <div>
             {activeTab === 'available' && `Показано заданий: ${filteredAvailableQuests.length}`}
             {activeTab === 'my_quests' && `Активных квестов: ${myActiveUserQuests.length}`}
+            {activeTab === 'review' && `Ожидают проверки: ${pendingReviews.length}`}
             {activeTab === 'manage' && `Всего квестов: ${quests.length}`}
           </div>
           <Button variant="secondary" onClick={onClose} className="text-xs py-1 px-4">
@@ -849,6 +1091,31 @@ export function QuestBoardModal({
             setAssignQuestTarget(null);
             showBanner('Квест успешно выдан ученику!');
           }}
+        />
+      )}
+
+      {/* MODAL: Submit Quest Report (Student) */}
+      {submitModalTarget && (
+        <SubmitQuestReportModal
+          isOpen={!!submitModalTarget}
+          onClose={() => setSubmitModalTarget(null)}
+          userQuest={submitModalTarget}
+          quest={quests.find(q => Number(q.id) === Number(submitModalTarget.questId))!}
+          onSubmit={handleSubmitQuest}
+          isLoading={actionLoadingId === Number(submitModalTarget.id)}
+        />
+      )}
+
+      {/* MODAL: Reject Quest (Admin) */}
+      {rejectModalTarget && (
+        <RejectQuestModal
+          isOpen={!!rejectModalTarget}
+          onClose={() => setRejectModalTarget(null)}
+          userQuest={rejectModalTarget}
+          quest={quests.find(q => Number(q.id) === Number(rejectModalTarget.questId))}
+          student={usersMap.get(Number(rejectModalTarget.userId))}
+          onReject={handleRejectQuest}
+          isLoading={actionLoadingId === Number(rejectModalTarget.id)}
         />
       )}
     </div>

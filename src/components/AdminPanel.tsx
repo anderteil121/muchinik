@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { User, GameState } from '../types';
 import { Button, Input, Modal, Select, Tooltip } from './ui';
 import { format } from 'date-fns';
-import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw, Store, Coins } from 'lucide-react';
+import { UserCircle, Swords, BookOpen, Clock, Settings, UserPlus, Upload, X, Pencil, Database, Search, Filter, Trash2, RotateCcw, Store, Coins, ScrollText } from 'lucide-react';
 import { LogMessage } from './LogMessage';
 import { ActiveEffects } from './ActiveEffects';
 
 interface AdminPanelProps {
   state: GameState;
   admin: User;
+  onOpenQuests?: (tab?: 'available' | 'my_quests' | 'review' | 'manage') => void;
 }
 
-export function AdminPanel({ state, admin }: AdminPanelProps) {
+export function AdminPanel({ state, admin, onOpenQuests }: AdminPanelProps) {
   const students = state.users.filter(u => u.role === 'student');
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [isCreateItemOpen, setIsCreateItemOpen] = useState(false);
@@ -22,6 +23,7 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
 
   const onlineSet = new Set(state.onlineUserIds || []);
   const filteredStudents = students.filter(s => filterOnline ? onlineSet.has(s.id) : true);
+  const pendingReviewsCount = (state.userQuests || []).filter(uq => uq.status === 'pending_review').length;
 
   const handleClearLogs = async () => {
     if (!confirm('Вы уверены, что хотите очистить все логи?')) return;
@@ -52,6 +54,34 @@ export function AdminPanel({ state, admin }: AdminPanelProps) {
             <div className="text-[10px] uppercase tracking-widest text-zinc-500">Архимаг (Мой профиль)</div>
           </div>
         </button>
+
+        {/* Pending Quests Review Notification for Admin */}
+        {pendingReviewsCount > 0 && (
+          <button
+            onClick={() => onOpenQuests?.('review')}
+            className="w-full text-left p-2.5 rounded-sm bg-amber-950/40 border border-amber-500/50 hover:border-amber-400 flex items-center justify-between gap-2 transition-all shadow-md group animate-pulse"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-sm bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <ScrollText size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-serif font-bold text-xs text-amber-400 truncate flex items-center gap-1.5">
+                  <span>Задания на проверке</span>
+                  <span className="bg-amber-500 text-zinc-950 px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold">
+                    {pendingReviewsCount}
+                  </span>
+                </div>
+                <div className="text-[10px] text-zinc-400 truncate">
+                  Нажмите, чтобы открыть панель проверки
+                </div>
+              </div>
+            </div>
+            <span className="text-xs text-amber-400 group-hover:translate-x-0.5 transition-transform font-bold shrink-0">
+              →
+            </span>
+          </button>
+        )}
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-sm overflow-hidden flex flex-col shrink-0">
           <div className="bg-zinc-950 p-3 border-b border-zinc-800 flex flex-col gap-2 shrink-0">

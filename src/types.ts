@@ -60,6 +60,8 @@ export interface MarketItem {
   price: number;
   stock?: number;
   createdAt?: number;
+  sellerId?: number | null;
+  sellerName?: string | null;
 }
 export interface Quest {
   id: number;
@@ -76,9 +78,12 @@ export interface UserQuest {
   id: number;
   userId: number;
   questId: number;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'active' | 'pending_review' | 'completed' | 'cancelled';
   acceptedAt: number;
+  submittedAt?: number | null;
+  submissionNote?: string | null;
   completedAt?: number | null;
+  reviewNote?: string | null;
 }
 export interface GameState {
   users: User[];

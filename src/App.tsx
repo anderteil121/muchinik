@@ -174,6 +174,8 @@ export default function App() {
   const userQuests = state.userQuests || [];
   const quests = state.quests || [];
   const activeQuestsCount = userQuests.filter(uq => Number(uq.userId) === Number(currentUser.id) && uq.status === 'active').length;
+  const pendingReviewsCount = userQuests.filter(uq => uq.status === 'pending_review').length;
+  const [questBoardInitialTab, setQuestBoardInitialTab] = useState<'available' | 'my_quests' | 'review' | 'manage' | undefined>(undefined);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-300 font-sans flex flex-col relative">
@@ -199,17 +201,24 @@ export default function App() {
 
           {/* Quest Board Button */}
           <button
-            onClick={() => setIsQuestBoardOpen(true)}
+            onClick={() => {
+              setQuestBoardInitialTab(currentUser.role === 'admin' && pendingReviewsCount > 0 ? 'review' : undefined);
+              setIsQuestBoardOpen(true);
+            }}
             className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-xs font-serif text-amber-400 transition-all shadow-sm group"
             title="Доска квестов"
           >
             <ScrollText size={15} className="text-amber-500 group-hover:scale-110 transition-transform" />
             <span className="hidden sm:inline">Доска квестов</span>
-            {activeQuestsCount > 0 && (
+            {currentUser.role === 'admin' && pendingReviewsCount > 0 ? (
+              <span className="bg-amber-500 text-zinc-950 px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold animate-pulse" title="Квестов на проверке">
+                {pendingReviewsCount} на проверке
+              </span>
+            ) : activeQuestsCount > 0 ? (
               <span className="bg-amber-500 text-zinc-950 px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold">
                 {activeQuestsCount}
               </span>
-            )}
+            ) : null}
           </button>
 
           {currentUser.role === 'admin' && (
@@ -239,6 +248,10 @@ export default function App() {
           <AdminPanel 
             state={state} 
             admin={currentUser} 
+            onOpenQuests={(tab) => {
+              setQuestBoardInitialTab(tab);
+              setIsQuestBoardOpen(true);
+            }}
           />
         ) : (
           <StudentPanel 
@@ -261,9 +274,13 @@ export default function App() {
 
       <QuestBoardModal
         isOpen={isQuestBoardOpen}
-        onClose={() => setIsQuestBoardOpen(false)}
+        onClose={() => {
+          setIsQuestBoardOpen(false);
+          setQuestBoardInitialTab(undefined);
+        }}
         state={state}
         currentUser={currentUser}
+        initialTab={questBoardInitialTab}
       />
     </div>
   );
